@@ -1,6 +1,7 @@
 // .opencode/plugin/cli-dispatch.ts
 import type { Plugin } from "@opencode-ai/plugin"
 import { DELEGATES, makeStartTool, makeReplyTool } from "../lib/cli-dispatch/delegate-tools"
+import { makeSystemTransform } from "../lib/cli-dispatch/hooks"
 
 const CliDispatchPlugin: Plugin = async () => {
   return {
@@ -10,6 +11,7 @@ const CliDispatchPlugin: Plugin = async () => {
         [`${cfg.name}_reply`, makeReplyTool(cfg)],
       ]),
     ),
+    "experimental.chat.system.transform": makeSystemTransform(),
   }
 }
 
