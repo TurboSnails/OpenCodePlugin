@@ -18,3 +18,16 @@ test("instructs verbatim forwarding without commentary", () => {
   expect(rule).toContain("verbatim")
   expect(rule).toContain("without adding your own commentary")
 })
+
+test("exempts delegate-switch commands from verbatim forwarding", () => {
+  const rule = buildRoutingRule("codex")
+  expect(rule).toContain("/cc")
+  expect(rule).toContain("/codex")
+  expect(rule.toLowerCase()).toContain("follow that command")
+})
+
+test("switch exemption holds for claude delegation too", () => {
+  const rule = buildRoutingRule("claude")
+  expect(rule).toContain("/cc")
+  expect(rule).toContain("/codex")
+})

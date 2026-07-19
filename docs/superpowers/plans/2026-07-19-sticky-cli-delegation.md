@@ -633,6 +633,7 @@ for m in json.load(sys.stdin):
 | E | reply confirms claude delegation was cleared |
 | F | opencode's own model answers UNKNOWN (it never saw the codename — proof it left claude's context) |
 | G | reply states no delegation was active |
+| B2 (switch) | codex active + /cc → claude_start called (template NOT forwarded to codex_reply); follow-ups go to claude |
 
 - [ ] **Step 4: Third-party provider rerun**
 
