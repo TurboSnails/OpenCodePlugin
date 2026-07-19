@@ -1,4 +1,4 @@
-export type DelegateName = "codex" | "claude" | "kimi"
+export type DelegateName = "codex" | "claude"
 
 export type DelegateSession = {
   delegate: DelegateName

@@ -48,33 +48,4 @@ export function parseClaudeLine(line: string): ParsedLine {
   return {}
 }
 
-export function parseKimiLine(line: string): ParsedLine {
-  let obj: any
-  try {
-    obj = JSON.parse(line)
-  } catch {
-    return { progressText: line }
-  }
 
-  if (obj.role === "assistant" && Array.isArray(obj.content)) {
-    const text = obj.content
-      .filter((c: any) => c.type === "text")
-      .map((c: any) => c.text)
-      .join("")
-    const think = obj.content
-      .filter((c: any) => c.type === "think")
-      .map((c: any) => c.think)
-      .join("")
-    return {
-      finalText: text || undefined,
-      progressText: text || think || undefined,
-    }
-  }
-  return {}
-}
-
-const KIMI_RESUME_HINT = /To resume this session: kimi -r ([0-9a-fA-F-]+)/
-
-export function parseKimiStderrForSessionId(stderrText: string): string | undefined {
-  return KIMI_RESUME_HINT.exec(stderrText)?.[1]
-}

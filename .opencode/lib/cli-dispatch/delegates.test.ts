@@ -5,8 +5,6 @@ import {
   buildCodexReplyArgs,
   buildClaudeStartArgs,
   buildClaudeReplyArgs,
-  buildKimiStartArgs,
-  buildKimiReplyArgs,
 } from "./delegates"
 
 test("codex start args", () => {
@@ -61,22 +59,6 @@ test("claude reply args", () => {
     "--resume",
     "uuid-1",
     "--",
-    "hi",
-  ])
-})
-
-test("kimi start args", () => {
-  expect(buildKimiStartArgs("hi")).toEqual(["--print", "--output-format", "stream-json", "--prompt", "hi"])
-})
-
-test("kimi reply args", () => {
-  expect(buildKimiReplyArgs("sess-1", "hi")).toEqual([
-    "--print",
-    "--output-format",
-    "stream-json",
-    "-r",
-    "sess-1",
-    "--prompt",
     "hi",
   ])
 })

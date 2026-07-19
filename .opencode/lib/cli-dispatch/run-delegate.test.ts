@@ -48,13 +48,13 @@ test("keeps the last finalText when multiple agent_message events are seen", asy
 
 test("captures stderr text alongside stdout", async () => {
   const result = await runDelegate({
-    binary: "kimi",
+    binary: "codex",
     args: [],
     parseLine: parseCodexLine,
     onProgress: () => {},
-    spawn: fakeSpawn(['{"type":"turn.started"}'], ["To resume this session: kimi -r abc-123"]),
+    spawn: fakeSpawn(['{"type":"turn.started"}'], ["some warning on stderr"]),
   })
-  expect(result.stderrText).toContain("kimi -r abc-123")
+  expect(result.stderrText).toContain("some warning on stderr")
 })
 
 test("throws with stderr content when process exits non-zero and produced no text", async () => {
