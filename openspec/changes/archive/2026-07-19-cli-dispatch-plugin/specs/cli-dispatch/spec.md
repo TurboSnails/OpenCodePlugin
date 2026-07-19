@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Delegate a conversation to an external CLI
-The system SHALL let the user start delegating the current opencode conversation to codex, claude, or kimi's own CLI agent by issuing `/codex`, `/cc`, or `/kimi` respectively. Starting delegation SHALL spawn the corresponding CLI in headless mode using the user's existing local authentication for that CLI, without requiring any additional API key configuration.
+The system SHALL let the user start delegating the current opencode conversation to codex or claude's own CLI agent by issuing `/codex` or `/cc` respectively. Starting delegation SHALL spawn the corresponding CLI in headless mode using the user's existing local authentication for that CLI, without requiring any additional API key configuration.
 
 #### Scenario: First delegation to codex
 - **WHEN** the user sends `/codex <task>` and no codex thread exists yet for the current opencode session
@@ -11,15 +11,11 @@ The system SHALL let the user start delegating the current opencode conversation
 - **WHEN** the user sends `/cc <task>`
 - **THEN** the system starts a new claude headless session (`claude -p`) with the given task, reusing the user's existing Claude Code authentication
 
-#### Scenario: Delegating to kimi
-- **WHEN** the user sends `/kimi <task>`
-- **THEN** the system starts a new kimi headless session (`kimi --print`) with the given task, reusing the user's existing kimi authentication
-
 ### Requirement: Sticky multi-turn delegation
-Once a delegate has been addressed via `/codex`, `/cc`, or `/kimi`, the system SHALL route subsequent user messages in that opencode session to the same delegate's session (continuing its thread/session id), without requiring the user to repeat the command, until a different delegate command is issued.
+Once a delegate has been addressed via `/codex` or `/cc`, the system SHALL route subsequent user messages in that opencode session to the same delegate's session (continuing its thread/session id), without requiring the user to repeat the command, until a different delegate command is issued.
 
 #### Scenario: Follow-up message continues the same delegate
-- **WHEN** the user has an active codex delegation and sends a follow-up message without a `/codex`/`/cc`/`/kimi` prefix
+- **WHEN** the user has an active codex delegation and sends a follow-up message without a `/codex`/`/cc` prefix
 - **THEN** the system continues the existing codex thread using its stored thread id, rather than answering with opencode's own model
 
 #### Scenario: Switching delegates takes over immediately
