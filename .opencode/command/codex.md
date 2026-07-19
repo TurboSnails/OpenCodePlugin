@@ -9,3 +9,5 @@ Delegate this conversation to the codex CLI.
 **For every message after this one** — until the user runs `/codex` or `/cc` again — do not answer directly and do not reason about the request yourself. Instead call `codex_reply` with the user's new message as the `prompt` argument, and return its response. This applies even when the message has no command prefix.
 
 If `codex_reply` fails because no codex session is active (e.g. it was never started, or opencode restarted since), call `codex_start` instead and continue from there.
+
+**Exiting delegation:** run `/opencode` to end the delegation for this session (cleared deterministically by the plugin; afterwards opencode answers directly again). While a delegation is active, ALL user input is forwarded to codex as prompt content — including non-delegate commands (e.g. `/opsx-explore`) and agent mentions (e.g. `@explore`). If codex fails, the error message will remind you about `/opencode`; the delegation stays active so you can fix the problem and continue, or exit.

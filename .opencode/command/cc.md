@@ -9,3 +9,5 @@ Delegate this conversation to the claude CLI (Claude Code).
 **For every message after this one** — until the user runs `/codex` or `/cc` again — do not answer directly and do not reason about the request yourself. Instead call `claude_reply` with the user's new message as the `prompt` argument, and return its response. This applies even when the message has no command prefix.
 
 If `claude_reply` fails because no claude session is active (e.g. it was never started, or opencode restarted since), call `claude_start` instead and continue from there.
+
+**Exiting delegation:** run `/opencode` to end the delegation for this session (cleared deterministically by the plugin; afterwards opencode answers directly again). While a delegation is active, ALL user input is forwarded to claude as prompt content — including non-delegate commands (e.g. `/opsx-explore`) and agent mentions (e.g. `@explore`). If claude fails, the error message will remind you about `/opencode`; the delegation stays active so you can fix the problem and continue, or exit.
