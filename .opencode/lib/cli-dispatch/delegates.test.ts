@@ -16,6 +16,7 @@ test("codex start args", () => {
     "-c",
     "sandbox_mode=read-only",
     "--skip-git-repo-check",
+    "--",
     "hi",
   ])
 })
@@ -29,6 +30,7 @@ test("codex reply args", () => {
     "-c",
     "sandbox_mode=read-only",
     "--skip-git-repo-check",
+    "--",
     "hi",
   ])
 })
@@ -43,6 +45,7 @@ test("claude start args", () => {
     "dontAsk",
     "--session-id",
     "uuid-1",
+    "--",
     "hi",
   ])
 })
@@ -57,6 +60,7 @@ test("claude reply args", () => {
     "dontAsk",
     "--resume",
     "uuid-1",
+    "--",
     "hi",
   ])
 })
