@@ -1,6 +1,6 @@
 import { test, expect, beforeEach } from "bun:test"
-import { makeSystemTransform, makeChatMessage } from "./hooks"
-import { setActiveDelegate, clearActiveDelegate } from "./session-store"
+import { makeSystemTransform, makeChatMessage, makeCommandBefore } from "./hooks"
+import { setActiveDelegate, clearActiveDelegate, getActiveDelegate } from "./session-store"
 
 beforeEach(() => {
   clearActiveDelegate("session-a")
@@ -53,4 +53,26 @@ test("leaves parts untouched when there is no mention", async () => {
   const parts = [{ type: "text", text: "hello" }]
   await makeChatMessage()({ sessionID: "session-a" }, { parts })
   expect(parts[0].text).toBe("hello")
+})
+
+test("clears an active delegation and notes which delegate was exited", async () => {
+  setActiveDelegate("session-a", "claude", "uuid-1")
+  const output: { parts: Array<{ type: string; text?: string; synthetic?: boolean }> } = { parts: [] }
+  await makeCommandBefore()({ command: "opencode", sessionID: "session-a" }, output)
+  expect(getActiveDelegate("session-a")).toBeUndefined()
+  expect(output.parts[0].text).toBe("[plugin] Cleared the active claude delegation for this session.")
+})
+
+test("notes when no delegation was active", async () => {
+  const output: { parts: Array<{ type: string; text?: string; synthetic?: boolean }> } = { parts: [] }
+  await makeCommandBefore()({ command: "opencode", sessionID: "session-a" }, output)
+  expect(output.parts[0].text).toBe("[plugin] No CLI delegation was active for this session.")
+})
+
+test("ignores other commands and preserves state", async () => {
+  setActiveDelegate("session-a", "claude", "uuid-1")
+  const output: { parts: Array<{ type: string; text?: string; synthetic?: boolean }> } = { parts: [] }
+  await makeCommandBefore()({ command: "opsx-explore", sessionID: "session-a" }, output)
+  expect(output.parts).toHaveLength(0)
+  expect(getActiveDelegate("session-a")).toEqual({ delegate: "claude", externalId: "uuid-1" })
 })

@@ -1,4 +1,4 @@
-import { getActiveDelegate } from "./session-store"
+import { getActiveDelegate, clearActiveDelegate } from "./session-store"
 import { buildRoutingRule } from "./routing-rule"
 
 type SystemTransformInput = { sessionID?: string }
@@ -35,5 +35,20 @@ export function makeChatMessage() {
     const active = getActiveDelegate(input.sessionID)
     if (!active) return
     rewriteMentionBoilerplate(output.parts)
+  }
+}
+
+type CommandBeforeInput = { command: string; sessionID: string }
+type CommandBeforeOutput = { parts: Array<{ type: string; text?: string; synthetic?: boolean }> }
+
+export function makeCommandBefore() {
+  return async (input: CommandBeforeInput, output: CommandBeforeOutput): Promise<void> => {
+    if (input.command !== "opencode") return
+    const active = getActiveDelegate(input.sessionID)
+    clearActiveDelegate(input.sessionID)
+    const note = active
+      ? `[plugin] Cleared the active ${active.delegate} delegation for this session.`
+      : "[plugin] No CLI delegation was active for this session."
+    output.parts.push({ type: "text", text: note, synthetic: true })
   }
 }
