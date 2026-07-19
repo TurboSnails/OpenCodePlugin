@@ -65,7 +65,7 @@ test("claude start tool stores its pre-generated session id even when the stream
 test("start tool returns an error string and stores nothing when the run fails", async () => {
   const start = makeStartTool(DELEGATES.codex, failingRun("spawn codex failed"))
   const output = await start.execute({ prompt: "hi" }, fakeContext("session-a"))
-  expect(output).toBe("codex failed: spawn codex failed")
+  expect(output).toBe("codex failed: spawn codex failed. Use /opencode to exit delegation.")
   expect(getActiveDelegate("session-a")).toBeUndefined()
 })
 
@@ -123,4 +123,12 @@ test("start tool forwards delegate progress into context metadata", async () => 
   const start = makeStartTool(DELEGATES.codex, run)
   await start.execute({ prompt: "hi" }, context)
   expect(seen).toContainEqual({ title: "codex", metadata: { progress: "working on it" } })
+})
+
+test("reply failure keeps delegation state and hints at /opencode", async () => {
+  setActiveDelegate("session-a", "codex", "thread-1")
+  const reply = makeReplyTool(DELEGATES.codex, failingRun("boom"))
+  const output = await reply.execute({ prompt: "hi" }, fakeContext("session-a"))
+  expect(output).toBe("codex failed: boom. Use /opencode to exit delegation.")
+  expect(getActiveDelegate("session-a")).toEqual({ delegate: "codex", externalId: "thread-1" })
 })

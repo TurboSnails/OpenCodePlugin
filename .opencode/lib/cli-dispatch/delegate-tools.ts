@@ -56,7 +56,7 @@ export function makeStartTool(cfg: DelegateConfig, run: RunDelegateFn = runDeleg
           onProgress: (text) => context.metadata({ title: cfg.name, metadata: { progress: text } }),
         })
       } catch (err) {
-        return `${cfg.name} failed: ${err instanceof Error ? err.message : String(err)}`
+        return `${cfg.name} failed: ${err instanceof Error ? err.message : String(err)}. Use /opencode to exit delegation.`
       }
       const externalId = start.externalId ?? result.externalId
       if (externalId) setActiveDelegate(context.sessionID, cfg.name, externalId)
@@ -83,7 +83,7 @@ export function makeReplyTool(cfg: DelegateConfig, run: RunDelegateFn = runDeleg
           onProgress: (text) => context.metadata({ title: cfg.name, metadata: { progress: text } }),
         })
       } catch (err) {
-        return `${cfg.name} failed: ${err instanceof Error ? err.message : String(err)}`
+        return `${cfg.name} failed: ${err instanceof Error ? err.message : String(err)}. Use /opencode to exit delegation.`
       }
       return result.finalText || `(${cfg.name} returned no text response)`
     },
