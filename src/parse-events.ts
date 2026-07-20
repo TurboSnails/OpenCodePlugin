@@ -1,0 +1,73 @@
+import type { ParserName } from "./config"
+
+export type ParsedLine = {
+  progressText?: string
+  finalText?: string
+  externalId?: string
+}
+
+export type LineParser = (line: string) => ParsedLine
+
+function parseClaudeLine(line: string): ParsedLine {
+  let obj: any
+  try {
+    obj = JSON.parse(line)
+  } catch {
+    return { progressText: line }
+  }
+
+  if (obj.type === "assistant") {
+    const text = (obj.message?.content ?? [])
+      .filter((c: any) => c.type === "text")
+      .map((c: any) => c.text)
+      .join("")
+    return text ? { progressText: text } : {}
+  }
+
+  if (obj.type === "result") {
+    return { finalText: obj.result }
+  }
+
+  return {}
+}
+
+function parseCodexLine(line: string): ParsedLine {
+  let obj: any
+  try {
+    obj = JSON.parse(line)
+  } catch {
+    return { progressText: line }
+  }
+
+  if (obj.type === "thread.started") {
+    return { externalId: obj.thread_id }
+  }
+
+  if (obj.type === "item.started" && obj.item?.type === "command_execution") {
+    return { progressText: `running: ${obj.item.command}` }
+  }
+
+  if (obj.type === "item.completed" && obj.item?.type === "command_execution") {
+    return { progressText: `finished: ${obj.item.command}` }
+  }
+
+  if (obj.type === "item.completed" && obj.item?.type === "agent_message") {
+    return { finalText: obj.item.text, progressText: obj.item.text }
+  }
+
+  return {}
+}
+
+function parseRawLine(line: string): ParsedLine {
+  return { progressText: line, finalText: line }
+}
+
+const PARSERS: Record<ParserName, LineParser> = {
+  claude: parseClaudeLine,
+  codex: parseCodexLine,
+  raw: parseRawLine,
+}
+
+export function getParser(name: ParserName): LineParser {
+  return PARSERS[name] ?? PARSERS.raw
+}
