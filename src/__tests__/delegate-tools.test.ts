@@ -142,7 +142,7 @@ describe("makeStartTool", () => {
     expect(active?.externalId).not.toBe(sentSessionId)
   })
 
-  it("keeps the delegate from the last completed concurrent start for one session", async () => {
+  it("keeps the delegate from the latest initiated start when concurrent starts race", async () => {
     let resolveFirst!: () => void
     let resolveSecond!: () => void
     const firstRun = new Promise<{ finalText: string; externalId: string; stderrText: string }>((resolve) => {
@@ -164,8 +164,9 @@ describe("makeStartTool", () => {
     resolveFirst()
     await firstStart
 
-    expect(getActiveDelegate(context.sessionID)?.externalId).toBe("thread-first")
+    expect(getActiveDelegate(context.sessionID)?.externalId).toBe("thread-second")
   })
+
   it("passes a default 10-minute timeout and the context abort signal to the run", async () => {
     let captured: { timeoutMs?: number; signal?: AbortSignal } = {}
     const fakeRun = async (options: { timeoutMs?: number; signal?: AbortSignal }) => {
@@ -193,6 +194,48 @@ describe("makeStartTool", () => {
     await startTool.execute({ prompt: "hello" }, context as any)
 
     expect(captured.timeoutMs).toBe(30000)
+  })
+
+  it("runs the delegate CLI in the session project directory from the tool context", async () => {
+    let captured: { cwd?: string } = {}
+    const fakeRun = async (options: { cwd?: string }) => {
+      captured = options
+      return { finalText: "hi", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeRun as any)
+    const context = { ...fakeContext("session-start-cwd"), directory: "/tmp/session-project-dir" }
+    await startTool.execute({ prompt: "hello" }, context as any)
+
+    expect(captured.cwd).toBe("/tmp/session-project-dir")
+  })
+
+  it("falls back to the process cwd when the tool context has no directory", async () => {
+    let captured: { cwd?: string } = {}
+    const fakeRun = async (options: { cwd?: string }) => {
+      captured = options
+      return { finalText: "hi", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeRun as any)
+    const context = { ...fakeContext("session-start-cwd-fallback"), directory: undefined }
+    await startTool.execute({ prompt: "hello" }, context as any)
+
+    expect(captured.cwd).toBe(process.cwd())
+  })
+
+  it("builds the change summary from the session project directory, not the process cwd", async () => {
+    initRepoWithCommit()
+    const fakeRun = async () => {
+      writeFileSync(join(dir, "delegate-made-this.md"), "hello\n")
+      return { finalText: "hi", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeRun as any)
+    const context = { ...fakeContext("session-start-summary-dir"), directory: dir, worktree: dir }
+    const reply = await startTool.execute({ prompt: "hello" }, context as any)
+
+    expect(reply).toContain("new file: delegate-made-this.md")
   })
 })
 
@@ -300,6 +343,7 @@ describe("makeReplyTool", () => {
     expect(reply).toContain("plan")
     expect(reply).toContain("/opencode")
   })
+
   it("passes a default 10-minute timeout and the context abort signal to the run", async () => {
     const fakeStartRun = async () => ({ finalText: "hi", externalId: undefined, stderrText: "" })
     let captured: { timeoutMs?: number; signal?: AbortSignal } = {}
@@ -335,5 +379,23 @@ describe("makeReplyTool", () => {
     await replyTool.execute({ prompt: "follow up" }, context as any)
 
     expect(captured.timeoutMs).toBe(45000)
+  })
+
+  it("runs the delegate CLI in the session project directory from the tool context", async () => {
+    const fakeStartRun = async () => ({ finalText: "hi", externalId: undefined, stderrText: "" })
+    let captured: { cwd?: string } = {}
+    const fakeReplyRun = async (options: { cwd?: string }) => {
+      captured = options
+      return { finalText: "hello again", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeStartRun as any)
+    const replyTool = makeReplyTool("claude", claudeConfig, fakeReplyRun as any)
+    const context = { ...fakeContext("session-reply-cwd"), directory: "/tmp/session-project-dir" }
+
+    await startTool.execute({ prompt: "hello" }, context as any)
+    await replyTool.execute({ prompt: "follow up" }, context as any)
+
+    expect(captured.cwd).toBe("/tmp/session-project-dir")
   })
 })

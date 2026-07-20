@@ -2,7 +2,7 @@ import { tool } from "@opencode-ai/plugin"
 import type { DelegateConfig } from "./config"
 import { resolveArgs } from "./config"
 import { runDelegate } from "./run-delegate"
-import { getActiveDelegate, setActiveDelegate, getSessionAgent } from "./session-store"
+import { getActiveDelegate, setActiveDelegate, getSessionAgent, beginDelegateStart, isLatestDelegateStart } from "./session-store"
 import type { ParserName } from "./config"
 
 export type RunDelegateFn = typeof runDelegate
@@ -72,12 +72,14 @@ export function makeStartTool(
     args: { prompt: tool.schema.string() },
     async execute(args, context) {
       const sessionId = crypto.randomUUID()
+      const startSequence = beginDelegateStart(context.sessionID)
       const resolvedArgs = resolveArgs(cfg.startArgs, {
         prompt: args.prompt,
         sessionId,
       })
 
-      const before = snapshotWorktree(process.cwd())
+      const workDir = context.directory ?? process.cwd()
+      const before = snapshotWorktree(workDir)
 
       let result
       try {
@@ -88,17 +90,20 @@ export function makeStartTool(
           onProgress: (text) => context.metadata({ title: name, metadata: { progress: text } }),
           timeoutMs: cfg.timeoutMs ?? DEFAULT_DELEGATE_TIMEOUT_MS,
           signal: context.abort,
+          cwd: workDir,
         })
       } catch (err) {
         return `${name} failed: ${err instanceof Error ? err.message : String(err)}. Use /opencode to exit delegation.`
       }
 
       const externalId = result.externalId ?? sessionId
-      if (externalId) {
+      // Only the latest initiated start may register its delegation; an
+      // earlier start that finishes later must not overwrite it.
+      if (externalId && isLatestDelegateStart(context.sessionID, startSequence)) {
         setActiveDelegate(context.sessionID, name, externalId)
       }
 
-      const summary = before === null ? null : buildChangeSummary(before, snapshotWorktree(process.cwd()) ?? before, process.cwd())
+      const summary = before === null ? null : buildChangeSummary(before, snapshotWorktree(workDir) ?? before, workDir)
       return (result.finalText || `(${name} returned no text response)`) + (summary ?? "")
     },
   })
@@ -128,7 +133,8 @@ export function makeReplyTool(
         externalId: active.externalId,
       })
 
-      const before = snapshotWorktree(process.cwd())
+      const workDir = context.directory ?? process.cwd()
+      const before = snapshotWorktree(workDir)
 
       let result
       try {
@@ -139,12 +145,13 @@ export function makeReplyTool(
           onProgress: (text) => context.metadata({ title: name, metadata: { progress: text } }),
           timeoutMs: cfg.timeoutMs ?? DEFAULT_DELEGATE_TIMEOUT_MS,
           signal: context.abort,
+          cwd: workDir,
         })
       } catch (err) {
         return `${name} failed: ${err instanceof Error ? err.message : String(err)}. Use /opencode to exit delegation.`
       }
 
-      const summary = before === null ? null : buildChangeSummary(before, snapshotWorktree(process.cwd()) ?? before, process.cwd())
+      const summary = before === null ? null : buildChangeSummary(before, snapshotWorktree(workDir) ?? before, workDir)
       return (result.finalText || `(${name} returned no text response)`) + (summary ?? "")
     },
   })

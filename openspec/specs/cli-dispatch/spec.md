@@ -73,6 +73,10 @@ The system SHALL track, per opencode session, which delegate (if any) is current
 - **WHEN** two separate opencode sessions each start a `/codex` delegation
 - **THEN** each session's follow-up messages continue its own codex thread id, independent of the other session's thread
 
+#### Scenario: Latest initiated concurrent start wins
+- **WHEN** two `*_start` runs race in the same opencode session and the later-initiated start completes before the earlier one
+- **THEN** the session's active delegation is the one from the latest initiated start, and the earlier start's later completion does not overwrite it
+
 #### Scenario: Claude session id is captured on start
 - **WHEN** the user sends `/claude <task>` and no claude session exists yet for the current opencode session
 - **THEN** the system registers the claude session as active for that opencode session using the session id passed to the claude CLI at spawn time, so that a subsequent follow-up message successfully continues the same claude session instead of failing with "No active claude session"
@@ -91,6 +95,10 @@ After a `*_start` or `*_reply` delegation run completes, the system SHALL compar
 #### Scenario: Non-git workspace
 - **WHEN** a delegation run completes in a directory that is not a git repository
 - **THEN** the tool result contains no change summary and no error is raised
+
+#### Scenario: Delegate subprocess and change summary use the session project directory
+- **WHEN** a `*_start` or `*_reply` delegation runs and the session's project directory (from the tool context) differs from the plugin process's working directory
+- **THEN** the delegate subprocess runs with the session's project directory as its working directory, and the before/after working-tree comparison is performed in that same directory; when the tool context provides no directory, both fall back to the plugin process's working directory
 
 ### Requirement: Delegate permission documentation
 The package documentation SHALL describe the permission/sandbox flags of each built-in delegate, state that delegates are expected to be configured with write capability, and state that permission flags are baked into a delegate session at spawn time so config changes require restarting the delegation to take effect.
