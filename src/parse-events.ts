@@ -8,13 +8,19 @@ export type ParsedLine = {
 
 export type LineParser = (line: string) => ParsedLine
 
+function isEventObject(value: unknown): value is Record<string, any> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 function parseClaudeLine(line: string): ParsedLine {
-  let obj: any
+  let obj: unknown
   try {
     obj = JSON.parse(line)
   } catch {
     return { progressText: line }
   }
+
+  if (!isEventObject(obj)) return {}
 
   if (obj.type === "assistant") {
     const text = (obj.message?.content ?? [])
@@ -32,12 +38,14 @@ function parseClaudeLine(line: string): ParsedLine {
 }
 
 function parseCodexLine(line: string): ParsedLine {
-  let obj: any
+  let obj: unknown
   try {
     obj = JSON.parse(line)
   } catch {
     return { progressText: line }
   }
+
+  if (!isEventObject(obj)) return {}
 
   if (obj.type === "thread.started") {
     return { externalId: obj.thread_id }

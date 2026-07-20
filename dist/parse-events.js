@@ -1,3 +1,6 @@
+function isEventObject(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 function parseClaudeLine(line) {
     let obj;
     try {
@@ -6,6 +9,8 @@ function parseClaudeLine(line) {
     catch {
         return { progressText: line };
     }
+    if (!isEventObject(obj))
+        return {};
     if (obj.type === "assistant") {
         const text = (obj.message?.content ?? [])
             .filter((c) => c.type === "text")
@@ -26,6 +31,8 @@ function parseCodexLine(line) {
     catch {
         return { progressText: line };
     }
+    if (!isEventObject(obj))
+        return {};
     if (obj.type === "thread.started") {
         return { externalId: obj.thread_id };
     }

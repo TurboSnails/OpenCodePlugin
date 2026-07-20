@@ -2,6 +2,23 @@ import { describe, it, expect } from "bun:test"
 import { getParser } from "../parse-events"
 
 describe("getParser", () => {
+  const malformedEvents = [
+    ["invalid JSON", "{bad"],
+    ["null JSON value", "null"],
+    ["array JSON value", "[]"],
+    ["event with required fields missing", '{"type":"assistant"}'],
+  ]
+
+  for (const parserName of ["claude", "codex"] as const) {
+    const parser = getParser(parserName)
+
+    for (const [description, line] of malformedEvents) {
+      it(`does not throw for ${description} in the ${parserName} parser`, () => {
+        expect(() => parser(line)).not.toThrow()
+      })
+    }
+  }
+
   describe("claude parser", () => {
     const parser = getParser("claude")
 

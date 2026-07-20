@@ -5,6 +5,7 @@ import { join } from "path"
 import { snapshotWorktree, buildChangeSummary, makeStartTool, makeReplyTool } from "../delegate-tools"
 import type { DelegateConfig } from "../config"
 import { getActiveDelegate, setSessionAgent } from "../session-store"
+import { makeChatMessage } from "../hooks"
 
 let dir: string
 
@@ -121,9 +122,69 @@ describe("makeStartTool", () => {
     expect(active?.delegate).toBe("claude")
     expect(active?.externalId).toBe(sentSessionId)
   })
+
+  it("prefers the externalId reported by the CLI over the client-generated sessionId", async () => {
+    let capturedArgs: string[] = []
+    const fakeRun = async (options: { args: string[] }) => {
+      capturedArgs = options.args
+      return { finalText: "hi", externalId: "cli-reported-thread", stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeRun as any)
+    const context = fakeContext("session-cli-external-id")
+    await startTool.execute({ prompt: "hello" }, context as any)
+
+    const sessionIdArgIndex = capturedArgs.indexOf("--session-id") + 1
+    const sentSessionId = capturedArgs[sessionIdArgIndex]
+    const active = getActiveDelegate(context.sessionID)
+
+    expect(active?.externalId).toBe("cli-reported-thread")
+    expect(active?.externalId).not.toBe(sentSessionId)
+  })
+
+  it("keeps the delegate from the last completed concurrent start for one session", async () => {
+    let resolveFirst!: () => void
+    let resolveSecond!: () => void
+    const firstRun = new Promise<{ finalText: string; externalId: string; stderrText: string }>((resolve) => {
+      resolveFirst = () => resolve({ finalText: "first", externalId: "thread-first", stderrText: "" })
+    })
+    const secondRun = new Promise<{ finalText: string; externalId: string; stderrText: string }>((resolve) => {
+      resolveSecond = () => resolve({ finalText: "second", externalId: "thread-second", stderrText: "" })
+    })
+    const fakeRun = async (options: { args: string[] }) =>
+      options.args.includes("first task") ? firstRun : secondRun
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeRun as any)
+    const context = fakeContext("same-session-race")
+    const firstStart = startTool.execute({ prompt: "first task" }, context as any)
+    const secondStart = startTool.execute({ prompt: "second task" }, context as any)
+
+    resolveSecond()
+    await secondStart
+    resolveFirst()
+    await firstStart
+
+    expect(getActiveDelegate(context.sessionID)?.externalId).toBe("thread-first")
+  })
 })
 
 describe("makeReplyTool", () => {
+  it("rejects before calling the CLI when claude_reply is used without claude_start", async () => {
+    let replyCalled = false
+    const fakeReplyRun = async () => {
+      replyCalled = true
+      return { finalText: "hello again", externalId: undefined, stderrText: "" }
+    }
+
+    const replyTool = makeReplyTool("claude", claudeConfig, fakeReplyRun as any)
+    const context = fakeContext("session-without-start")
+
+    await expect(replyTool.execute({ prompt: "follow up" }, context as any)).rejects.toThrow(
+      "No active claude session for this conversation. Call claude_start first.",
+    )
+    expect(replyCalled).toBe(false)
+  })
+
   it("succeeds after claude_start even though the parser never reported an externalId", async () => {
     const fakeStartRun = async () => ({ finalText: "hi", externalId: undefined, stderrText: "" })
     const fakeReplyRun = async () => ({ finalText: "hello again", externalId: undefined, stderrText: "" })
@@ -136,6 +197,36 @@ describe("makeReplyTool", () => {
 
     const reply = await replyTool.execute({ prompt: "follow up" }, context as any)
     expect(reply).toContain("hello again")
+  })
+
+  it("keeps concurrent sessions on their own delegate threads", async () => {
+    const fakeStartRun = async (options: { args: string[] }) => ({
+      finalText: "started",
+      externalId: options.args.includes("first task") ? "thread-one" : "thread-two",
+      stderrText: "",
+    })
+    const replyArgs: string[][] = []
+    const fakeReplyRun = async (options: { args: string[] }) => {
+      replyArgs.push(options.args)
+      return { finalText: "replied", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeStartRun as any)
+    const replyTool = makeReplyTool("claude", claudeConfig, fakeReplyRun as any)
+    const firstContext = fakeContext("concurrent-session-one")
+    const secondContext = fakeContext("concurrent-session-two")
+
+    await Promise.all([
+      startTool.execute({ prompt: "first task" }, firstContext as any),
+      startTool.execute({ prompt: "second task" }, secondContext as any),
+    ])
+    await Promise.all([
+      replyTool.execute({ prompt: "first reply" }, firstContext as any),
+      replyTool.execute({ prompt: "second reply" }, secondContext as any),
+    ])
+
+    expect(replyArgs).toContainEqual(["--resume", "thread-one", "--", "first reply"])
+    expect(replyArgs).toContainEqual(["--resume", "thread-two", "--", "second reply"])
   })
 
   it("returns an actionable message instead of calling the CLI when the cached agent is restrictive", async () => {
@@ -152,6 +243,28 @@ describe("makeReplyTool", () => {
 
     await startTool.execute({ prompt: "hello" }, context as any)
     setSessionAgent("session-c", "plan")
+
+    const reply = await replyTool.execute({ prompt: "follow up" }, context as any)
+
+    expect(replyCalled).toBe(false)
+    expect(reply).toContain("plan")
+    expect(reply).toContain("/opencode")
+  })
+
+  it("returns an actionable message after chat.message caches a restrictive agent", async () => {
+    const fakeStartRun = async () => ({ finalText: "hi", externalId: undefined, stderrText: "" })
+    let replyCalled = false
+    const fakeReplyRun = async () => {
+      replyCalled = true
+      return { finalText: "hello again", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeStartRun as any)
+    const replyTool = makeReplyTool("claude", claudeConfig, fakeReplyRun as any)
+    const context = fakeContext("session-chat-message-plan")
+
+    await startTool.execute({ prompt: "hello" }, context as any)
+    await makeChatMessage()({ sessionID: context.sessionID, agent: "plan" }, { parts: [] })
 
     const reply = await replyTool.execute({ prompt: "follow up" }, context as any)
 
