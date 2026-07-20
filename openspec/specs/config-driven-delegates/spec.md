@@ -26,7 +26,30 @@ Each delegate definition SHALL specify: `binary` (CLI executable name), `parser`
 
 #### Scenario: Invalid config missing required field
 - **WHEN** config contains a delegate missing the `binary` field
-- **THEN** the system fails with a clear error message indicating the missing field
+- **THEN** the system fails with an error message naming the delegate and the missing field
+
+#### Scenario: Invalid delegate name
+- **WHEN** config defines a delegate whose name does not match `/^[\w-]+$/`
+- **THEN** the system fails with an error message explaining the name would produce invalid tool names
+
+#### Scenario: startArgs missing the prompt placeholder
+- **WHEN** config defines a delegate whose `startArgs` does not contain `{prompt}`
+- **THEN** the system fails with an error message naming the delegate and the `startArgs` field
+
+#### Scenario: replyArgs missing the externalId placeholder
+- **WHEN** config defines a delegate whose `replyArgs` does not contain `{externalId}`
+- **THEN** the system logs a warning that replies cannot resume a session, but still loads the delegate
+
+### Requirement: Degraded plugin behavior on broken config
+When the config file exists but fails to parse or validate, the plugin SHALL register a single `cli_dispatch_status` diagnostic tool instead of registering zero tools silently.
+
+#### Scenario: Broken config registers diagnostic tool
+- **WHEN** the plugin starts and the config file is invalid
+- **THEN** the system registers only the `cli_dispatch_status` tool and logs the load error to the console
+
+#### Scenario: Diagnostic tool reports the failure
+- **WHEN** a user or model calls `cli_dispatch_status`
+- **THEN** the tool returns the config file path, the list of validation errors, and instructions for fixing the config and reloading the plugin
 
 ### Requirement: Template variable substitution in args
 The system SHALL replace `{prompt}`, `{sessionId}`, and `{externalId}` placeholders in argument arrays with actual values at runtime.

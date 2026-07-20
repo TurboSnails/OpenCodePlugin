@@ -1,6 +1,6 @@
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin, Hooks } from "@opencode-ai/plugin"
+import { tool } from "@opencode-ai/plugin"
 import { loadConfig } from "./config"
-import type { CliDispatchConfig } from "./config"
 import { makeStartTool, makeReplyTool } from "./delegate-tools"
 import { makeCheckTool } from "./health-check"
 import { makeSystemTransform, makeChatMessage, makeCommandBefore } from "./hooks"
@@ -19,27 +19,29 @@ export { checkDelegate, makeCheckTool } from "./health-check"
 
 export function createCliDispatchPlugin(configPath?: string, options?: { commandsDir?: string }): Plugin {
   return async () => {
-    let config: CliDispatchConfig
+    let tools: NonNullable<Hooks["tool"]>
 
     try {
-      config = loadConfig(configPath)
+      const config = loadConfig(configPath)
+
+      if (options?.commandsDir) {
+        generateCommands(config, options.commandsDir)
+      }
+
+      // Generate tools dynamically from config
+      tools = Object.fromEntries(
+        Object.entries(config.delegates).flatMap(([name, cfg]) => [
+          [`${name}_start`, makeStartTool(name, cfg)],
+          [`${name}_reply`, makeReplyTool(name, cfg)],
+          [`${name}_check`, makeCheckTool(name, cfg)],
+        ]),
+      )
     } catch (err) {
       console.error("[cli-dispatch] Failed to load config:", err)
-      config = { delegates: {} }
+      // Degrade to a single diagnostic tool so users can discover why no
+      // delegate tools were registered instead of hitting "tool not found".
+      tools = { cli_dispatch_status: makeStatusTool(err) }
     }
-
-    if (options?.commandsDir) {
-      generateCommands(config, options.commandsDir)
-    }
-
-    // Generate tools dynamically from config
-    const tools = Object.fromEntries(
-      Object.entries(config.delegates).flatMap(([name, cfg]) => [
-        [`${name}_start`, makeStartTool(name, cfg)],
-        [`${name}_reply`, makeReplyTool(name, cfg)],
-        [`${name}_check`, makeCheckTool(name, cfg)],
-      ]),
-    )
 
     return {
       tool: tools,
@@ -48,6 +50,24 @@ export function createCliDispatchPlugin(configPath?: string, options?: { command
       "command.execute.before": makeCommandBefore(),
     }
   }
+}
+
+export function makeStatusTool(err: unknown) {
+  return tool({
+    description:
+      "Report why cli-dispatch registered no delegate tools. The plugin configuration failed to load; call this to see the config file path, the validation errors, and how to fix them.",
+    args: {},
+    async execute() {
+      const message = err instanceof Error ? err.message : String(err)
+      return [
+        "cli-dispatch failed to load its configuration, so no delegate tools were registered.",
+        "",
+        message,
+        "",
+        "Fix: edit the config file above so that every delegate has a valid name (letters, digits, underscore, hyphen), a \"binary\", a \"parser\" (\"claude\", \"codex\", or \"raw\"), \"startArgs\" containing the {prompt} placeholder, and \"replyArgs\". Then restart opencode to reload the plugin.",
+      ].join("\n")
+    },
+  })
 }
 
 // Default export for backwards compatibility

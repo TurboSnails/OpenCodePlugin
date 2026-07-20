@@ -64,51 +64,58 @@ const DEFAULT_CONFIG: CliDispatchConfig = {
   },
 }
 
-function validateConfig(config: unknown): config is CliDispatchConfig {
+function validateConfig(config: unknown): string[] {
+  const errors: string[] = []
+
   if (typeof config !== "object" || config === null) {
-    return false
+    return ["config must be an object"]
   }
 
   const obj = config as Record<string, unknown>
   if (typeof obj.delegates !== "object" || obj.delegates === null) {
-    return false
+    return ['"delegates" must be an object']
   }
 
   const delegates = obj.delegates as Record<string, unknown>
   for (const [name, delegate] of Object.entries(delegates)) {
+    if (!/^[\w-]+$/.test(name)) {
+      errors.push(`delegate "${name}": name must match /^[\\w-]+$/ (letters, digits, underscore, hyphen) or it would produce invalid tool names`)
+    }
+
     if (typeof delegate !== "object" || delegate === null) {
-      console.error(`Invalid delegate config for "${name}": must be an object`)
-      return false
+      errors.push(`delegate "${name}": must be an object`)
+      continue
     }
 
     const d = delegate as Record<string, unknown>
     if (typeof d.binary !== "string") {
-      console.error(`Invalid delegate config for "${name}": missing or invalid "binary" field`)
-      return false
+      errors.push(`delegate "${name}": missing or invalid "binary" field`)
     }
 
     if (typeof d.parser !== "string" || !["claude", "codex", "raw"].includes(d.parser)) {
-      console.error(`Invalid delegate config for "${name}": "parser" must be "claude", "codex", or "raw"`)
-      return false
+      errors.push(`delegate "${name}": "parser" must be "claude", "codex", or "raw"`)
     }
 
     if (!Array.isArray(d.startArgs) || !d.startArgs.every((a) => typeof a === "string")) {
-      console.error(`Invalid delegate config for "${name}": "startArgs" must be an array of strings`)
-      return false
+      errors.push(`delegate "${name}": "startArgs" must be an array of strings`)
+    } else if (!d.startArgs.some((a) => a.includes("{prompt}"))) {
+      errors.push(`delegate "${name}": "startArgs" must contain the {prompt} placeholder, otherwise the CLI runs without the user's task`)
     }
 
     if (!Array.isArray(d.replyArgs) || !d.replyArgs.every((a) => typeof a === "string")) {
-      console.error(`Invalid delegate config for "${name}": "replyArgs" must be an array of strings`)
-      return false
+      errors.push(`delegate "${name}": "replyArgs" must be an array of strings`)
+    } else if (!d.replyArgs.some((a) => a.includes("{externalId}"))) {
+      // Warning only: a raw delegate without any session concept may
+      // legitimately have nothing to resume.
+      console.warn(`[cli-dispatch] delegate "${name}": "replyArgs" has no {externalId} placeholder; ${name}_reply will not be able to resume a session`)
     }
 
     if (d.timeoutMs !== undefined && (typeof d.timeoutMs !== "number" || !(d.timeoutMs > 0))) {
-      console.error(`Invalid delegate config for "${name}": "timeoutMs" must be a positive number`)
-      return false
+      errors.push(`delegate "${name}": "timeoutMs" must be a positive number`)
     }
   }
 
-  return true
+  return errors
 }
 
 export function loadConfig(configPath?: string): CliDispatchConfig {
@@ -126,11 +133,12 @@ export function loadConfig(configPath?: string): CliDispatchConfig {
         const raw = readFileSync(path, "utf-8")
         const config = JSON.parse(raw)
 
-        if (!validateConfig(config)) {
-          throw new Error(`Invalid config at ${path}`)
+        const errors = validateConfig(config)
+        if (errors.length > 0) {
+          throw new Error(`Invalid config at ${path}:\n  - ${errors.join("\n  - ")}`)
         }
 
-        return config
+        return config as CliDispatchConfig
       } catch (err) {
         if (err instanceof SyntaxError) {
           throw new Error(`Failed to parse config at ${path}: ${err.message}`)

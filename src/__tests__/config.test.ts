@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test"
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test"
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs"
 import { join } from "path"
 import { loadConfig, resolveArgs } from "../config"
@@ -72,6 +72,115 @@ describe("loadConfig", () => {
 
     expect(() => loadConfig(configPath)).toThrow("Invalid config")
   })
+
+  it("throws an error naming the delegate and the missing/invalid field", () => {
+    const configPath = join(TEST_DIR, "field-errors.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: {
+            binary: "myagent",
+            // missing parser, startArgs, replyArgs
+          },
+        },
+      }),
+    )
+
+    expect(() => loadConfig(configPath)).toThrow(/myagent/)
+    expect(() => loadConfig(configPath)).toThrow(/parser/)
+    expect(() => loadConfig(configPath)).toThrow(/startArgs/)
+    expect(() => loadConfig(configPath)).toThrow(/replyArgs/)
+  })
+
+  it("throws on delegate names that would produce invalid tool names", () => {
+    const configPath = join(TEST_DIR, "bad-name.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          "my agent": {
+            binary: "myagent",
+            parser: "raw",
+            startArgs: ["--", "{prompt}"],
+            replyArgs: ["--", "{prompt}"],
+          },
+        },
+      }),
+    )
+
+    expect(() => loadConfig(configPath)).toThrow(/"my agent"/)
+    expect(() => loadConfig(configPath)).toThrow(/name/i)
+  })
+
+  it("accepts delegate names with word characters and hyphens", () => {
+    const configPath = join(TEST_DIR, "good-name.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          "my-agent_2": {
+            binary: "myagent",
+            parser: "raw",
+            startArgs: ["--", "{prompt}"],
+            replyArgs: ["--", "{prompt}"],
+          },
+        },
+      }),
+    )
+
+    const config = loadConfig(configPath)
+    expect(config.delegates["my-agent_2"]).toBeDefined()
+  })
+
+  it("throws when startArgs lacks the {prompt} placeholder", () => {
+    const configPath = join(TEST_DIR, "no-prompt.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: {
+            binary: "myagent",
+            parser: "raw",
+            startArgs: ["--json"],
+            replyArgs: ["--", "{prompt}"],
+          },
+        },
+      }),
+    )
+
+    expect(() => loadConfig(configPath)).toThrow(/startArgs/)
+    expect(() => loadConfig(configPath)).toThrow(/\{prompt\}/)
+  })
+
+  it("warns but does not throw when replyArgs lacks the {externalId} placeholder", () => {
+    const configPath = join(TEST_DIR, "no-external-id.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: {
+            binary: "myagent",
+            parser: "raw",
+            startArgs: ["--", "{prompt}"],
+            replyArgs: ["--", "{prompt}"],
+          },
+        },
+      }),
+    )
+
+    const warn = spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const config = loadConfig(configPath)
+      expect(config.delegates.myagent).toBeDefined()
+      expect(warn).toHaveBeenCalled()
+      const messages = warn.mock.calls.map((args) => String(args[0]))
+      expect(messages.some((m) => m.includes("myagent") && m.includes("{externalId}"))).toBe(true)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it("accepts an optional timeoutMs per delegate", () => {
     const configPath = join(TEST_DIR, "with-timeout.json")
     writeFileSync(
