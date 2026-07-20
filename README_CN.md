@@ -167,11 +167,18 @@ delegate 的行为由 `cli-dispatch.config.json` 定义，按以下顺序解析�
 | 字段 | 含义 |
 |---|---|
 | `binary` | 要启动的可执行文件（需在 `PATH` 中，或提供绝对路径）。 |
-| `parser` | `"claude"`、`"codex"` 或 `"raw"` —— 决定如何把 stdout 事件解析成进度更新和最终响应。 |
+| `parser` | `"claude"`、`"codex"` 或 `"raw"` —— 决定如何把 stdout 事件解析成进度更新和最终响应。其中 `raw` 的最终响应是把所有 stdout 行按顺序用换行拼接（而不是只取最后一行）。 |
 | `startArgs` | 首轮调用的参数模板，支持占位符 `{prompt}`、`{sessionId}`。 |
 | `replyArgs` | 后续调用的参数模板，支持占位符 `{prompt}`、`{externalId}`（delegate 在启动时返回的会话 id）。 |
+| `timeoutMs` | 可选。单次调用的超时时间（毫秒），覆盖默认的 10 分钟超时（见[超时与取消](#超时与取消)）。必须是正数，否则配置校验会失败。 |
 
 新增一个 delegate 只需要在 `delegates` 下新增一个条目——对应的 `/{name}` 命令，以及 `{name}_start` / `{name}_reply` / `{name}_check` 三个工具都会自动生成。
+
+### 配置错误与 `cli_dispatch_status` 工具
+
+出现以下情况时配置校验会失败：delegate 名称不匹配 `/^[\w-]+$/`（只允许字母、数字、下划线、连字符，否则生成的工具名非法）、`binary`/`parser` 缺失或非法、`startArgs` 不是字符串数组或缺少 `{prompt}` 占位符（没有它 CLI 会在没有任何任务内容的情况下运行）、`timeoutMs` 不是正数。而 `replyArgs` 缺少 `{externalId}` 只会打印一条警告——对没有会话概念的 raw delegate 来说，没有可续接的会话是合理的。
+
+配置加载失败时，插件不再静默失效：它会注册一个 `cli_dispatch_status` 诊断工具，而不是什么都不注册。调用它可以看到配置文件路径、所有校验错误以及修复方法——改好配置后重启 OpenCode 即可重新加载插件。
 
 ### Delegate 权限
 
@@ -212,9 +219,17 @@ delegate 的行为由 `cli-dispatch.config.json` 定义，按以下顺序解析�
 
 在委托激活期间，该会话中**之后所有**的输入——普通消息、其他 slash 命令、`@agent` 提及——都会作为 prompt 文本转发给当前的 delegate，直到执行 `/opencode` 为止。如果某次 delegate 调用失败，错误信息会直接返回到对话中，并提示运行 `/opencode`；委托状态本身不会被自动清除，方便你重试或先排查问题。
 
+### 超时与取消
+
+每次 delegate 调用默认有 10 分钟的超时上限，可以在配置里用 `timeoutMs` 按 delegate 单独覆盖。在 OpenCode 中取消工具调用（按 Esc）会立即终止 delegate 子进程，并报 `cancelled by user`，与超时或崩溃可以区分开。终止时先发 SIGTERM，宽限 2 秒后再升级为 SIGKILL。
+
+delegate 子进程在会话的项目目录（OpenCode 在工具上下文中提供的 `directory`）下运行，变更摘要也基于该目录计算；拿不到该目录时回退为插件进程的 cwd。
+
 ### 已知限制
 
 部分模型无法可靠地遵循注入的粘性路由系统提示词。经过验证（2026-07-19）：MiniMax-M3（`minimax-cn` / `minimaxi-cn`，某些环境下 `opencode serve` 的默认模型）会把展开后的整个命令模板当作 prompt 转发给 `{name}_start`（而不是只转发 `/cc`、`/codex` 后面的用户输入），导致 delegate 把它当作疑似 prompt injection 而拒绝执行；并且在纯文本 follow-up 时会忽略粘性路由规则，直接自己作答而不是调用 `{name}_reply`——即便路由规则是中英双语且重复注入的情况下依然如此。Kimi（`kimi-for-coding/k3`）已验证可以正常配合本插件工作。
+
+同一会话内如果并发发起多个 `{name}_start`，以最新发起的为准：先发起但后完成的调用不会覆盖更新的委托。
 
 ## 开发
 

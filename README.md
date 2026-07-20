@@ -167,11 +167,18 @@ Each delegate entry:
 | Field | Meaning |
 |---|---|
 | `binary` | Executable to spawn (must be on `PATH`, or an absolute path). |
-| `parser` | `"claude"`, `"codex"`, or `"raw"` — selects how stdout events are parsed into progress updates and a final response. |
+| `parser` | `"claude"`, `"codex"`, or `"raw"` — selects how stdout events are parsed into progress updates and a final response. With `raw`, the final response is all stdout lines joined by newlines, in order (not just the last line). |
 | `startArgs` | Argv template for the first turn. Placeholders: `{prompt}`, `{sessionId}`. |
 | `replyArgs` | Argv template for follow-up turns. Placeholders: `{prompt}`, `{externalId}` (the session id the delegate itself returned on start). |
+| `timeoutMs` | Optional. Per-run timeout in milliseconds, overriding the default 10-minute timeout (see [Timeout and cancellation](#timeout-and-cancellation)). Must be a positive number — anything else fails config validation. |
 
 Adding a new delegate is just adding another entry — a `/{name}` command, and `{name}_start` / `{name}_reply` / `{name}_check` tools, are generated automatically for every key under `delegates`.
+
+### Config errors and the `cli_dispatch_status` tool
+
+Validation rejects a config when any delegate name doesn't match `/^[\w-]+$/` (letters, digits, underscore, hyphen — anything else would produce invalid tool names), when `binary`/`parser` are missing or invalid, when `startArgs` isn't a string array or doesn't contain the `{prompt}` placeholder (without it the CLI would run with no task), or when `timeoutMs` isn't a positive number. A `replyArgs` without `{externalId}` only logs a warning — a raw delegate with no session concept may legitimately have nothing to resume.
+
+If the config fails to load, the plugin no longer degrades silently: instead of registering nothing, it registers a single `cli_dispatch_status` diagnostic tool. Call it to see the config file path, every validation error, and how to fix them — then edit the config and restart OpenCode to reload the plugin.
 
 ### Delegate permissions
 
@@ -212,9 +219,17 @@ The plugin generates one slash command per configured delegate, named `/<delegat
 
 While a delegation is active, **all** subsequent input in that session — plain messages, other slash commands, `@agent` mentions — is forwarded to the active delegate as prompt text, until `/opencode` is run. If a delegate call fails, the error is returned in-chat as a reminder to run `/opencode`; the delegation itself stays active so you can retry or fix the underlying issue.
 
+### Timeout and cancellation
+
+Each delegate run is bounded by a 10-minute timeout by default, overridable per delegate via `timeoutMs` in the config. Cancelling the tool call in OpenCode (Esc) terminates the delegate subprocess immediately and reports `cancelled by user`, which is distinguishable from a timeout or a crash. Termination sends SIGTERM first and escalates to SIGKILL after a 2-second grace period.
+
+Delegate subprocesses run in the session's project directory (the `directory` OpenCode provides in the tool context), which is also the base for the change summary — falling back to the plugin process cwd if no directory is available.
+
 ### Known limitations
 
 Some models don't reliably follow the injected sticky-routing system prompt. Verified 2026-07-19: MiniMax-M3 (`minimax-cn` / `minimaxi-cn`) forwards the entire expanded command template as the prompt instead of just the user's arguments (causing the delegate to refuse as a suspected prompt injection), and ignores the sticky routing rule on plain follow-ups, answering directly instead of calling `{name}_reply`. Kimi (`kimi-for-coding/k3`) has been verified to work correctly with this plugin.
+
+If multiple `{name}_start` calls run concurrently within the same session, the latest initiated start wins: an earlier start that finishes later will not overwrite the newer delegation.
 
 ## Development
 
