@@ -27,7 +27,6 @@
   },
   "files": [
     "dist",
-    "commands",
     "cli-dispatch.config.json"
   ],
   "keywords": [

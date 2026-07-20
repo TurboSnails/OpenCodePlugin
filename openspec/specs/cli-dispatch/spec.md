@@ -2,20 +2,16 @@
 
 ## Purpose
 
-An opencode plugin and set of commands (`/codex`, `/cc`) that delegate the current conversation to codex or claude's own CLI agent loop via a headless subprocess, with sticky multi-turn routing, live progress reporting parsed from the CLI's streaming output, and per-session delegation state.
+An opencode plugin that statically generates one slash command per configured delegate (`/<delegate-name>`, e.g. `/claude`, `/codex`), delegating the current conversation to that CLI agent's own loop via a headless subprocess, with sticky multi-turn routing, live progress reporting parsed from the CLI's streaming output, and per-session delegation state.
 
 ## Requirements
 
 ### Requirement: Delegate a conversation to an external CLI
-The system SHALL let the user start delegating the current opencode conversation to any configured CLI agent by issuing a command matching the delegate name (e.g., `/claude`, `/codex`, `/my-agent`). Starting delegation SHALL spawn the corresponding CLI in headless mode using the user's existing local authentication for that CLI, without requiring any additional API key configuration.
+The system SHALL statically generate one opencode slash command per configured delegate (`/<delegate-name>`, e.g. `/claude`, `/codex`), which lets the user start delegating the current opencode conversation to that CLI agent. Slash commands for names with no configured delegate are outside the plugin's scope: commands are static markdown files, and unknown slash commands are handled by the opencode host itself, not intercepted by the plugin. Starting delegation SHALL spawn the corresponding CLI in headless mode using the user's existing local authentication for that CLI, without requiring any additional API key configuration.
 
 #### Scenario: First delegation to a configured CLI
 - **WHEN** the user sends `/<delegate-name> <task>` and no session exists yet for that delegate in the current opencode session
 - **THEN** the system starts a new headless session with the given task using the delegate's configured binary and args, and returns the delegate's response to the user
-
-#### Scenario: Unknown delegate command
-- **WHEN** the user sends `/<unknown-name> <task>` and no delegate with that name is configured
-- **THEN** the system responds with an error indicating the delegate is not configured
 
 ### Requirement: Sticky multi-turn delegation
 Once a delegate has been addressed via `/<delegate-name>`, the system SHALL route subsequent user messages in that opencode session to the same delegate's session (continuing its thread/session id), without requiring the user to repeat the command, until a different delegate command is issued or delegation is exited. The routing rule SHALL be injected at system-prompt level on every model call while a delegation is active (via the plugin's `experimental.chat.system.transform` hook keyed by opencode session id), so that intervening non-delegate commands do not terminate the delegation. While a delegation is active, command invocations (e.g. `/opsx-explore`) and agent mentions (e.g. `@explore`) SHALL be forwarded to the delegate as prompt content rather than handled by opencode's own model; opencode-internal agent-mention expansion text SHALL be rewritten to a plain-language statement of intent before forwarding.
@@ -130,11 +126,7 @@ When a delegate invocation fails, the system SHALL preserve the session's delega
 - **THEN** the delegation state is preserved for the session, and the error text returned to the user includes a hint to use `/opencode` to exit delegation
 
 ### Requirement: Permission passthrough during active delegation
-While a session has an active delegation, opencode-side permission prompts that would otherwise block a delegate tool call (`*_start`/`*_reply`) SHALL either be resolved automatically without prompting the user, or, where no interceptable permission event exists, SHALL surface an explicit message identifying the blocking cause (e.g. the active agent) and pointing at `/opencode` as the way to recover — rather than a silent or confusing failure.
-
-#### Scenario: Permission ask is auto-resolved during active delegation
-- **WHEN** a session has an active claude delegation and an opencode `permission.ask` event fires for that session while a delegate tool call is in flight
-- **THEN** the system resolves the permission as allowed without prompting the user
+No interceptable opencode permission event exists for delegate tool calls (`*_start`/`*_reply`): a live spike against opencode 1.18.3 confirmed that `permission.ask` never fires for custom plugin tool calls, so the plugin deliberately registers no `permission.ask` hook. Instead, protection is implemented inside the delegate tools themselves: where a block is possible (e.g. the active agent restricts tool use via its injected system prompt), the tools SHALL surface an explicit message identifying the blocking cause (e.g. the active agent) and pointing at `/opencode` as the way to recover — rather than a silent or confusing failure. This guard covers the tool-invocation path only: if a restrictive agent's system prompt leads the model to never call the delegate tool at all, no tool code runs and the guard cannot fire.
 
 #### Scenario: Non-interceptable block surfaces an explicit message
 - **WHEN** a session has an active delegation, the current agent restricts delegate tool availability, and no permission event is emitted for the plugin to intercept

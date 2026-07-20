@@ -44,7 +44,7 @@ bun run build         # tsc -> dist/
 npm pack              # 在仓库根目录生成 opencode-cli-dispatch-<version>.tgz
 ```
 
-`npm pack` 会根据 `package.json` 里的 `files` 字段（`dist/`、`commands/`、`cli-dispatch.config.json`）以及 `README.md`/`package.json` 打包 tarball；如果只想预览打包内容而不实际生成文件，先跑一遍 `npm pack --dry-run` 即可。
+`npm pack` 会根据 `package.json` 里的 `files` 字段（`dist/`、`cli-dispatch.config.json`）以及 `README.md`/`package.json` 打包 tarball；如果只想预览打包内容而不实际生成文件，先跑一遍 `npm pack --dry-run` 即可。
 
 ## 安装方式
 
@@ -205,8 +205,9 @@ delegate 的行为由 `cli-dispatch.config.json` 定义，按以下顺序解析�
 
 ## 使用方法
 
-- `/cc <消息>` —— 启动（或继续）一个 Claude Code 委托。
-- `/codex <消息>` —— 启动（或继续）一个 Codex 委托。
+插件会按配置为每个 delegate 生成一个 slash 命令，命名为 `/<delegate-name>`（如 `/claude`、`/codex`）。本仓库中的 `/cc` 是 [.opencode/command/cc.md](.opencode/command/cc.md) 里手工维护的 `/claude` 别名，并非插件生成。
+
+- `/<delegate-name> <消息>` —— 启动（或继续）一个到该 delegate 的委托（如 `/claude <消息>`、`/codex <消息>`，或 `/cc` 别名）。
 - `/opencode` —— 退出该会话当前激活的委托，之后由 OpenCode 自己直接作答。
 
 在委托激活期间，该会话中**之后所有**的输入——普通消息、其他 slash 命令、`@agent` 提及——都会作为 prompt 文本转发给当前的 delegate，直到执行 `/opencode` 为止。如果某次 delegate 调用失败，错误信息会直接返回到对话中，并提示运行 `/opencode`；委托状态本身不会被自动清除，方便你重试或先排查问题。

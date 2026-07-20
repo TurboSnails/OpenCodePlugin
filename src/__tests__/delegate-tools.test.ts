@@ -237,6 +237,24 @@ describe("makeStartTool", () => {
 
     expect(reply).toContain("new file: delegate-made-this.md")
   })
+
+  it("returns an actionable message instead of calling the CLI when the cached agent is restrictive", async () => {
+    let startCalled = false
+    const fakeRun = async () => {
+      startCalled = true
+      return { finalText: "hi", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeRun as any)
+    const context = fakeContext("session-start-restrictive-agent")
+    setSessionAgent("session-start-restrictive-agent", "plan")
+
+    const reply = await startTool.execute({ prompt: "hello" }, context as any)
+
+    expect(startCalled).toBe(false)
+    expect(reply).toContain("plan")
+    expect(reply).toContain("/opencode")
+  })
 })
 
 describe("makeReplyTool", () => {

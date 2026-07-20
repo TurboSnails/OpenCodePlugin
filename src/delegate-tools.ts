@@ -71,6 +71,11 @@ export function makeStartTool(
     description: `Start a new ${name} CLI session with the given task and return ${name}'s response. Use this the first time a conversation is delegated to ${name}.`,
     args: { prompt: tool.schema.string() },
     async execute(args, context) {
+      const agent = getSessionAgent(context.sessionID)
+      if (agent && RESTRICTIVE_AGENTS.has(agent)) {
+        return `The "${agent}" agent restricts delegate tool calls via its system prompt, so ${name}_start may be blocked or misbehave. Use /opencode to exit any active delegation, or switch to a less restrictive agent, before continuing.`
+      }
+
       const sessionId = crypto.randomUUID()
       const startSequence = beginDelegateStart(context.sessionID)
       const resolvedArgs = resolveArgs(cfg.startArgs, {
