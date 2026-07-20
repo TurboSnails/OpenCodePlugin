@@ -61,9 +61,10 @@ export function makeStartTool(
     description: `Start a new ${name} CLI session with the given task and return ${name}'s response. Use this the first time a conversation is delegated to ${name}.`,
     args: { prompt: tool.schema.string() },
     async execute(args, context) {
+      const sessionId = crypto.randomUUID()
       const resolvedArgs = resolveArgs(cfg.startArgs, {
         prompt: args.prompt,
-        sessionId: crypto.randomUUID(),
+        sessionId,
       })
 
       const before = snapshotWorktree(process.cwd())
@@ -80,8 +81,9 @@ export function makeStartTool(
         return `${name} failed: ${err instanceof Error ? err.message : String(err)}. Use /opencode to exit delegation.`
       }
 
-      if (result.externalId) {
-        setActiveDelegate(context.sessionID, name, result.externalId)
+      const externalId = result.externalId ?? sessionId
+      if (externalId) {
+        setActiveDelegate(context.sessionID, name, externalId)
       }
 
       const summary = before === null ? null : buildChangeSummary(before, snapshotWorktree(process.cwd()) ?? before, process.cwd())
