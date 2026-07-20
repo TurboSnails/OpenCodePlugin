@@ -4,10 +4,8 @@
   "workspaces": {
     "": {
       "name": "opencode-cli-dispatch",
-      "dependencies": {
-        "@opencode-ai/plugin": "^1.18.3",
-      },
       "devDependencies": {
+        "@opencode-ai/plugin": "^1.18.3",
         "@types/bun": "latest",
         "typescript": "^5.4.0",
       },

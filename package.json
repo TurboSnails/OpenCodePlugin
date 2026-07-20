@@ -1,6 +1,6 @@
 {
   "name": "opencode-cli-dispatch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "OpenCode plugin for delegating conversations to external CLI agents (Claude, Codex, etc.)",
   "type": "module",
   "main": "dist/index.js",
@@ -17,12 +17,10 @@
     "clean": "rm -rf dist",
     "test": "bun test"
   },
-  "dependencies": {
-    "@opencode-ai/plugin": "^1.18.3"
-  },
   "devDependencies": {
     "typescript": "^5.4.0",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@opencode-ai/plugin": "^1.18.3"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.18.0"
