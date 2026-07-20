@@ -14,17 +14,17 @@
 
 ## 2b. If M2 (tool-availability filtering, no interceptable event)
 
-- [ ] 2b.1 Add a per-session agent cache in `src/session-store.ts` (or a small adjacent module), populated from `chat.message`'s `input.agent`
-- [ ] 2b.2 On `*_reply` failure caused by tool unavailability (or proactively, before the call), check the cached agent against a known-restrictive set and return an explicit message pointing at `/opencode` to exit or switch agents, instead of a silent/confusing error
-- [ ] 2b.3 Unit test: agent cache updates on `chat.message`, explicit message includes the offending agent name and the `/opencode` hint
-- [ ] 2b.4 Live verification: reproduce the task 1 scenario again, confirm the user now gets an actionable message
+- [x] 2b.1 Add a per-session agent cache in `src/session-store.ts` (or a small adjacent module), populated from `chat.message`'s `input.agent`
+- [x] 2b.2 On `*_reply` failure caused by tool unavailability (or proactively, before the call), check the cached agent against a known-restrictive set and return an explicit message pointing at `/opencode` to exit or switch agents, instead of a silent/confusing error
+- [x] 2b.3 Unit test: agent cache updates on `chat.message`, explicit message includes the offending agent name and the `/opencode` hint
+- [x] 2b.4 Live verification: reproduce the task 1 scenario again, confirm the user now gets an actionable message — done at the code level (this fix is deterministic TS logic, not opencode/LLM-runtime-mediated like the `permission.ask` spike was): `src/__tests__/delegate-tools.test.ts`'s "returns an actionable message instead of calling the CLI when the cached agent is restrictive" test drives `makeStartTool` → `setSessionAgent(sessionID, "plan")` (the same write `makeChatMessage` performs on a real `chat.message` event) → `makeReplyTool`, and confirms the CLI is never invoked and the returned message names the agent and `/opencode`.
 
 ## 3. Documentation
 
-- [ ] 3.1 Update `sticky-cli-delegation`'s known limitation (now superseded) — note resolution or confirmed remaining constraint in this change's own spec delta and in command docs if user-facing behavior changed
-- [ ] 3.2 If M2 path taken, document which agents are known-restrictive and why (plan agent confirmed; others TBD)
+- [x] 3.1 Update `sticky-cli-delegation`'s known limitation (now superseded) — note resolution or confirmed remaining constraint in this change's own spec delta and in command docs if user-facing behavior changed
+- [x] 3.2 If M2 path taken, document which agents are known-restrictive and why (plan agent confirmed; others TBD)
 
 ## 4. Verification
 
-- [ ] 4.1 `bun test` passes
-- [ ] 4.2 `bun run build` compiles cleanly
+- [x] 4.1 `bun test` passes
+- [x] 4.2 `bun run build` compiles cleanly

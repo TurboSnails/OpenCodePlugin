@@ -76,7 +76,7 @@ When a delegate call fails (binary missing, auth expired, delegate-side error), 
 - [User issues `/opencode` when not delegated] → `clearActiveDelegate` is a no-op; command doc tells the agent to reply that no delegation was active.
 - [Forwarded command content may confuse the delegate CLI] → Acceptable: delegate receives it as plain prompt text; explore-mode text is self-describing. Evaluated during implementation with a real `/cc` + `/opsx-explore` sequence.
 - [Long delegated sessions grow the opencode-side transcript with tool call/response pairs] → Existing compaction handles it; out of scope.
-- [Switching to the plan agent mid-delegation may block `*_reply` tools under plan-mode permissions, and `system.transform` receives no agent name so injection cannot be skipped per-agent] → Documented as a known limitation; revisit if it bites in practice.
+- [Switching to the plan agent mid-delegation may block `*_reply` tools under plan-mode permissions, and `system.transform` receives no agent name so injection cannot be skipped per-agent] → Documented as a known limitation; revisit if it bites in practice. Resolved in `delegate-permission-passthrough` (2026-07-20): live spike found no `permission.ask` event ever fires for custom plugin tools (agent restrictions are system-prompt-enforced, not permission-event-mediated), so the fix is a `chat.message`-populated per-session agent cache plus an explicit actionable message from `*_reply` when the cached agent is known-restrictive (`plan` confirmed).
 
 ## Open Questions
 

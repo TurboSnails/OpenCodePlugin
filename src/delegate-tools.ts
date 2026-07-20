@@ -2,12 +2,18 @@ import { tool } from "@opencode-ai/plugin"
 import type { DelegateConfig } from "./config"
 import { resolveArgs } from "./config"
 import { runDelegate } from "./run-delegate"
-import { getActiveDelegate, setActiveDelegate } from "./session-store"
+import { getActiveDelegate, setActiveDelegate, getSessionAgent } from "./session-store"
 import type { ParserName } from "./config"
 
 export type RunDelegateFn = typeof runDelegate
 
 const SUMMARY_LINE_CAP = 50
+
+// opencode agents confirmed (via live spike, see delegate-permission-passthrough/design.md)
+// to inject a system prompt that tells the model file edits/tool calls are forbidden.
+// opencode itself never blocks the call (no `permission.ask` event fires), so the
+// model can silently refuse or misbehave instead of erroring — surface it explicitly.
+const RESTRICTIVE_AGENTS = new Set(["plan"])
 
 export function snapshotWorktree(cwd: string): string | null {
   try {
@@ -104,6 +110,11 @@ export function makeReplyTool(
       const active = getActiveDelegate(context.sessionID)
       if (!active || active.delegate !== name) {
         throw new Error(`No active ${name} session for this conversation. Call ${name}_start first.`)
+      }
+
+      const agent = getSessionAgent(context.sessionID)
+      if (agent && RESTRICTIVE_AGENTS.has(agent)) {
+        return `The "${agent}" agent restricts delegate follow-ups via its system prompt, so ${name}_reply may be blocked or misbehave. Use /opencode to exit this delegation, or switch to a less restrictive agent, before continuing.`
       }
 
       const resolvedArgs = resolveArgs(cfg.replyArgs, {

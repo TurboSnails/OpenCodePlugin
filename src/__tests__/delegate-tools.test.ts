@@ -4,7 +4,7 @@ import { tmpdir } from "os"
 import { join } from "path"
 import { snapshotWorktree, buildChangeSummary, makeStartTool, makeReplyTool } from "../delegate-tools"
 import type { DelegateConfig } from "../config"
-import { getActiveDelegate } from "../session-store"
+import { getActiveDelegate, setSessionAgent } from "../session-store"
 
 let dir: string
 
@@ -136,5 +136,27 @@ describe("makeReplyTool", () => {
 
     const reply = await replyTool.execute({ prompt: "follow up" }, context as any)
     expect(reply).toContain("hello again")
+  })
+
+  it("returns an actionable message instead of calling the CLI when the cached agent is restrictive", async () => {
+    const fakeStartRun = async () => ({ finalText: "hi", externalId: undefined, stderrText: "" })
+    let replyCalled = false
+    const fakeReplyRun = async () => {
+      replyCalled = true
+      return { finalText: "hello again", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeStartRun as any)
+    const replyTool = makeReplyTool("claude", claudeConfig, fakeReplyRun as any)
+    const context = fakeContext("session-c")
+
+    await startTool.execute({ prompt: "hello" }, context as any)
+    setSessionAgent("session-c", "plan")
+
+    const reply = await replyTool.execute({ prompt: "follow up" }, context as any)
+
+    expect(replyCalled).toBe(false)
+    expect(reply).toContain("plan")
+    expect(reply).toContain("/opencode")
   })
 })

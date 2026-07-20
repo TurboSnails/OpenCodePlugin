@@ -1,4 +1,4 @@
-import { getActiveDelegate, clearActiveDelegate } from "./session-store"
+import { getActiveDelegate, clearActiveDelegate, setSessionAgent } from "./session-store"
 import { buildRoutingRule } from "./routing-rule"
 
 type SystemTransformInput = { sessionID?: string }
@@ -27,11 +27,13 @@ export function rewriteMentionBoilerplate(parts: PartLike[]): void {
   }
 }
 
-type ChatMessageInput = { sessionID: string }
+type ChatMessageInput = { sessionID: string; agent?: string }
 type ChatMessageOutput = { parts: PartLike[] }
 
 export function makeChatMessage() {
   return async (input: ChatMessageInput, output: ChatMessageOutput): Promise<void> => {
+    if (input.agent) setSessionAgent(input.sessionID, input.agent)
+
     const active = getActiveDelegate(input.sessionID)
     if (!active) return
     rewriteMentionBoilerplate(output.parts)

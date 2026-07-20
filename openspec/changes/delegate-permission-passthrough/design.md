@@ -92,6 +92,13 @@ Across all three tool invocations (2× `claude_start`, 1× `claude_reply`) under
 
 The `claude_reply` failure above is **not** a permission/agent-restriction issue at all — it reproduces identically outside of `plan` agent too. Root cause: `src/parse-events.ts`'s `parseClaudeLine` never returns `externalId` (only `parseCodexLine` does, from `thread.started`'s `thread_id`). `makeStartTool` in `src/delegate-tools.ts` only calls `setActiveDelegate(...)` `if (result.externalId)` — since the claude parser never populates it, `claude_start` never registers an active session for the `claude` delegate, so every `claude_reply` fails with "No active claude session," permission gating aside. This fully explains why the sticky follow-up path could never be reproduced in spike part 1 (not the ephemeral-server session-store issue as originally guessed — that was real too, but even a persistent server hits this). Worth its own fix/change; flagged here for visibility, out of scope for `delegate-permission-passthrough`.
 
+## Implementation (M2 path, task 2b)
+
+- `src/session-store.ts` gained a second cache, `sessionAgents: Map<sessionID, agent>`, alongside the existing delegate-session cache, with `getSessionAgent`/`setSessionAgent`.
+- `src/hooks.ts`'s `makeChatMessage` now also writes to that cache whenever the `chat.message` hook input carries an `agent` field (it's optional and only present on some messages; absence leaves the last-cached value untouched).
+- `src/delegate-tools.ts`'s `makeReplyTool` checks the cached agent against `RESTRICTIVE_AGENTS` (currently `{"plan"}`) before invoking the delegate CLI, and short-circuits with an explicit message naming the agent and pointing at `/opencode` instead of running the CLI.
+- Known-restrictive agents: **`plan`** — confirmed live (spike parts 1 and 2, design.md above) to inject a system-prompt rule forbidding file edits/tool calls, with no interceptable `permission.ask` event. Other built-in or custom agents are unconfirmed (TBD) and are not in the set; add them here as they're confirmed to avoid over-blocking agents that are actually fine.
+
 ## Open Questions
 
 None remaining for the M1/M2 decision — resolved above (M2 confirmed). The `claude` delegate's `externalId` extraction bug is a new, separate open item (see previous section) that should become its own change.

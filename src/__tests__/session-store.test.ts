@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test"
-import { getActiveDelegate, setActiveDelegate, clearActiveDelegate } from "../session-store"
+import { getActiveDelegate, setActiveDelegate, clearActiveDelegate, getSessionAgent, setSessionAgent } from "../session-store"
 
 describe("session-store", () => {
   beforeEach(() => {
@@ -46,5 +46,22 @@ describe("session-store", () => {
     const result = getActiveDelegate("session-1")
     expect(result?.delegate).toBe("codex")
     expect(result?.externalId).toBe("codex-456")
+  })
+})
+
+describe("session agent cache", () => {
+  it("returns undefined for a session with no cached agent", () => {
+    expect(getSessionAgent("agent-nonexistent")).toBeUndefined()
+  })
+
+  it("sets and gets the cached agent for a session", () => {
+    setSessionAgent("agent-session-1", "plan")
+    expect(getSessionAgent("agent-session-1")).toBe("plan")
+  })
+
+  it("overwrites the cached agent for the same session", () => {
+    setSessionAgent("agent-session-2", "plan")
+    setSessionAgent("agent-session-2", "build")
+    expect(getSessionAgent("agent-session-2")).toBe("build")
   })
 })
