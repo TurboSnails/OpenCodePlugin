@@ -72,6 +72,66 @@ describe("loadConfig", () => {
 
     expect(() => loadConfig(configPath)).toThrow("Invalid config")
   })
+  it("accepts an optional timeoutMs per delegate", () => {
+    const configPath = join(TEST_DIR, "with-timeout.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: {
+            binary: "myagent",
+            parser: "raw",
+            startArgs: ["--", "{prompt}"],
+            replyArgs: ["--", "{prompt}"],
+            timeoutMs: 30000,
+          },
+        },
+      }),
+    )
+
+    const config = loadConfig(configPath)
+    expect(config.delegates.myagent.timeoutMs).toBe(30000)
+  })
+
+  it("throws on non-number timeoutMs", () => {
+    const configPath = join(TEST_DIR, "bad-timeout-type.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: {
+            binary: "myagent",
+            parser: "raw",
+            startArgs: ["--", "{prompt}"],
+            replyArgs: ["--", "{prompt}"],
+            timeoutMs: "30000",
+          },
+        },
+      }),
+    )
+
+    expect(() => loadConfig(configPath)).toThrow("Invalid config")
+  })
+
+  it("throws on non-positive timeoutMs", () => {
+    const configPath = join(TEST_DIR, "bad-timeout-value.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: {
+            binary: "myagent",
+            parser: "raw",
+            startArgs: ["--", "{prompt}"],
+            replyArgs: ["--", "{prompt}"],
+            timeoutMs: -5,
+          },
+        },
+      }),
+    )
+
+    expect(() => loadConfig(configPath)).toThrow("Invalid config")
+  })
 })
 
 describe("resolveArgs", () => {

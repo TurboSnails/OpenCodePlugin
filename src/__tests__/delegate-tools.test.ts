@@ -166,6 +166,34 @@ describe("makeStartTool", () => {
 
     expect(getActiveDelegate(context.sessionID)?.externalId).toBe("thread-first")
   })
+  it("passes a default 10-minute timeout and the context abort signal to the run", async () => {
+    let captured: { timeoutMs?: number; signal?: AbortSignal } = {}
+    const fakeRun = async (options: { timeoutMs?: number; signal?: AbortSignal }) => {
+      captured = options
+      return { finalText: "hi", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeRun as any)
+    const context = fakeContext("session-timeout-default")
+    await startTool.execute({ prompt: "hello" }, context as any)
+
+    expect(captured.timeoutMs).toBe(10 * 60 * 1000)
+    expect(captured.signal).toBe(context.abort)
+  })
+
+  it("prefers the delegate config timeoutMs over the default", async () => {
+    let captured: { timeoutMs?: number } = {}
+    const fakeRun = async (options: { timeoutMs?: number }) => {
+      captured = options
+      return { finalText: "hi", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", { ...claudeConfig, timeoutMs: 30000 }, fakeRun as any)
+    const context = fakeContext("session-timeout-override")
+    await startTool.execute({ prompt: "hello" }, context as any)
+
+    expect(captured.timeoutMs).toBe(30000)
+  })
 })
 
 describe("makeReplyTool", () => {
@@ -271,5 +299,41 @@ describe("makeReplyTool", () => {
     expect(replyCalled).toBe(false)
     expect(reply).toContain("plan")
     expect(reply).toContain("/opencode")
+  })
+  it("passes a default 10-minute timeout and the context abort signal to the run", async () => {
+    const fakeStartRun = async () => ({ finalText: "hi", externalId: undefined, stderrText: "" })
+    let captured: { timeoutMs?: number; signal?: AbortSignal } = {}
+    const fakeReplyRun = async (options: { timeoutMs?: number; signal?: AbortSignal }) => {
+      captured = options
+      return { finalText: "hello again", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeStartRun as any)
+    const replyTool = makeReplyTool("claude", claudeConfig, fakeReplyRun as any)
+    const context = fakeContext("session-reply-timeout")
+
+    await startTool.execute({ prompt: "hello" }, context as any)
+    await replyTool.execute({ prompt: "follow up" }, context as any)
+
+    expect(captured.timeoutMs).toBe(10 * 60 * 1000)
+    expect(captured.signal).toBe(context.abort)
+  })
+
+  it("prefers the delegate config timeoutMs over the default", async () => {
+    const fakeStartRun = async () => ({ finalText: "hi", externalId: undefined, stderrText: "" })
+    let captured: { timeoutMs?: number } = {}
+    const fakeReplyRun = async (options: { timeoutMs?: number }) => {
+      captured = options
+      return { finalText: "hello again", externalId: undefined, stderrText: "" }
+    }
+
+    const startTool = makeStartTool("claude", claudeConfig, fakeStartRun as any)
+    const replyTool = makeReplyTool("claude", { ...claudeConfig, timeoutMs: 45000 }, fakeReplyRun as any)
+    const context = fakeContext("session-reply-timeout-override")
+
+    await startTool.execute({ prompt: "hello" }, context as any)
+    await replyTool.execute({ prompt: "follow up" }, context as any)
+
+    expect(captured.timeoutMs).toBe(45000)
   })
 })

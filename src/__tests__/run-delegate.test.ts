@@ -90,6 +90,102 @@ describe("runDelegate", () => {
     expect(killed).toBe(true)
   })
 
+  it("escalates to SIGKILL when the process ignores SIGTERM after a timeout", async () => {
+    const signals: (string | undefined)[] = []
+    let resolveExited!: (code: number) => void
+    const spawn: SpawnFn = () => ({
+      stdout: new Response("").body!,
+      stderr: new Response("").body!,
+      exited: new Promise<number>((resolve) => {
+        resolveExited = resolve
+      }),
+      kill: (signal?: string) => {
+        signals.push(signal)
+        if (signal === "SIGKILL") resolveExited(137)
+      },
+    })
+    // Safety net so this test fails fast instead of hanging if the
+    // SIGTERM->SIGKILL escalation is missing: force the fake process to
+    // exit, which makes the assertions below fail instead.
+    const watchdog = setTimeout(() => resolveExited(143), 300)
+    await expect(
+      runDelegate({
+        binary: "claude",
+        args: [],
+        parser: "raw",
+        onProgress: () => {},
+        spawn,
+        timeoutMs: 50,
+        killGraceMs: 50,
+      }),
+    ).rejects.toThrow(/timed out after 50ms/)
+    clearTimeout(watchdog)
+    expect(signals).toEqual(["SIGTERM", "SIGKILL"])
+  })
+
+  it("kills the subprocess and rejects as cancelled when the abort signal fires", async () => {
+    const controller = new AbortController()
+    const signals: (string | undefined)[] = []
+    let resolveExited!: (code: number) => void
+    const spawn: SpawnFn = () => ({
+      stdout: new Response("").body!,
+      stderr: new Response("").body!,
+      exited: new Promise<number>((resolve) => {
+        resolveExited = resolve
+      }),
+      kill: (signal?: string) => {
+        signals.push(signal)
+        resolveExited(143)
+      },
+    })
+    // Safety net so this test fails fast instead of hanging if the abort
+    // signal is not wired up.
+    const watchdog = setTimeout(() => resolveExited(0), 300)
+    const run = runDelegate({
+      binary: "claude",
+      args: [],
+      parser: "raw",
+      onProgress: () => {},
+      spawn,
+      signal: controller.signal,
+    })
+    controller.abort()
+    await expect(run).rejects.toThrow(/cancelled by user/)
+    clearTimeout(watchdog)
+    expect(signals).toEqual(["SIGTERM"])
+  })
+
+  it("rejects as cancelled when the signal is already aborted before spawning", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    let killed = false
+    let resolveExited!: (code: number) => void
+    const spawn: SpawnFn = () => ({
+      stdout: new Response("").body!,
+      stderr: new Response("").body!,
+      exited: new Promise<number>((resolve) => {
+        resolveExited = resolve
+      }),
+      kill: () => {
+        killed = true
+        resolveExited(143)
+      },
+    })
+    const watchdog = setTimeout(() => resolveExited(0), 300)
+    await expect(
+      runDelegate({
+        binary: "claude",
+        args: [],
+        parser: "raw",
+        onProgress: () => {},
+        spawn,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow(/cancelled by user/)
+    clearTimeout(watchdog)
+    expect(killed).toBe(true)
+  })
+
   it("does not time out when the process exits in time", async () => {
     const result = await runDelegate({
       binary: "claude",

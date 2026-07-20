@@ -47,6 +47,25 @@ While a delegated CLI subprocess is running, the system SHALL surface live progr
 - **WHEN** a codex delegation is running a multi-step task
 - **THEN** the system updates opencode's UI with progress information parsed from codex's JSONL event stream before the task completes
 
+### Requirement: Delegate run timeout and cancellation
+Every delegate CLI run SHALL be bounded by a timeout: 10 minutes by default, overridable per delegate via an optional `timeoutMs` field (in milliseconds) in the delegate configuration. A `timeoutMs` value that is not a positive number SHALL be rejected as an invalid config. When the timeout fires, the system SHALL terminate the subprocess with SIGTERM and, if it has not exited after a short grace period, SHALL escalate to SIGKILL; the resulting error SHALL state clearly that the run timed out. When the user cancels an in-flight delegate tool call (via opencode's abort signal), the system SHALL terminate the subprocess the same way and SHALL report the failure as cancelled by the user, distinguishable from both a timeout and a subprocess crash.
+
+#### Scenario: Timeout terminates a hung delegate CLI
+- **WHEN** a delegate CLI run exceeds its configured timeout
+- **THEN** the system sends SIGTERM to the subprocess, escalates to SIGKILL after the grace period if the process is still running, and the tool result states that the run timed out
+
+#### Scenario: Delegate config overrides the default timeout
+- **WHEN** a delegate's config sets `timeoutMs` to a positive number
+- **THEN** that value bounds the delegate's runs instead of the 10-minute default
+
+#### Scenario: Invalid timeoutMs is rejected
+- **WHEN** a delegate's config contains a `timeoutMs` that is not a positive number
+- **THEN** loading the config fails with an invalid-config error naming the delegate
+
+#### Scenario: User cancellation kills the delegate subprocess
+- **WHEN** the user aborts an in-flight `*_start` or `*_reply` tool call
+- **THEN** the system terminates the delegate subprocess (SIGTERM, escalating to SIGKILL after the grace period) and the tool result indicates the run was cancelled by the user, rather than a timeout or a crash
+
 ### Requirement: Session state scoped per opencode session
 The system SHALL track, per opencode session, which delegate (if any) is currently active and that delegate's own thread/session identifier, so that concurrent opencode sessions do not share or overwrite each other's delegated conversations. Capturing this identifier on `*_start` SHALL work uniformly for every configured delegate, regardless of whether that delegate's CLI assigns its own session/thread id and reports it back on the output stream, or whether opencode generates the id itself and passes it to the CLI at spawn time.
 

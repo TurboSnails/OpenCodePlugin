@@ -8,6 +8,7 @@ export interface DelegateConfig {
   parser: ParserName
   startArgs: string[]
   replyArgs: string[]
+  timeoutMs?: number
 }
 
 export interface CliDispatchConfig {
@@ -98,6 +99,11 @@ function validateConfig(config: unknown): config is CliDispatchConfig {
 
     if (!Array.isArray(d.replyArgs) || !d.replyArgs.every((a) => typeof a === "string")) {
       console.error(`Invalid delegate config for "${name}": "replyArgs" must be an array of strings`)
+      return false
+    }
+
+    if (d.timeoutMs !== undefined && (typeof d.timeoutMs !== "number" || !(d.timeoutMs > 0))) {
+      console.error(`Invalid delegate config for "${name}": "timeoutMs" must be a positive number`)
       return false
     }
   }

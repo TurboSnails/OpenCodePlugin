@@ -13,7 +13,7 @@ export type SpawnFn = (
   stdout: ReadableStream<Uint8Array>
   stderr: ReadableStream<Uint8Array>
   exited: Promise<number>
-  kill: () => void
+  kill: (signal?: "SIGTERM" | "SIGKILL") => void
 }
 
 export type RunDelegateResult = {
@@ -49,8 +49,11 @@ export const defaultSpawn: SpawnFn = (binary, args, options) => {
     stderr: "pipe",
     ...(options?.cwd ? { cwd: options.cwd } : {}),
   })
-  return { stdout: proc.stdout, stderr: proc.stderr, exited: proc.exited, kill: () => proc.kill() }
+  return { stdout: proc.stdout, stderr: proc.stderr, exited: proc.exited, kill: (signal) => proc.kill(signal) }
 }
+
+// Grace period between SIGTERM and SIGKILL when terminating a hung delegate.
+export const KILL_GRACE_MS = 2000
 
 export async function runDelegate(options: {
   binary: string
@@ -60,6 +63,8 @@ export async function runDelegate(options: {
   spawn?: SpawnFn
   cwd?: string
   timeoutMs?: number
+  killGraceMs?: number
+  signal?: AbortSignal
 }): Promise<RunDelegateResult> {
   const spawn = options.spawn ?? defaultSpawn
   const child = spawn(options.binary, options.args, options.cwd ? { cwd: options.cwd } : undefined)
@@ -69,11 +74,27 @@ export async function runDelegate(options: {
   let externalId: string | undefined
   let stderrText = ""
   let timedOut = false
+  let cancelled = false
+
+  let killTimer: ReturnType<typeof setTimeout> | undefined
+  const terminateChild = () => {
+    child.kill("SIGTERM")
+    killTimer = setTimeout(() => child.kill("SIGKILL"), options.killGraceMs ?? KILL_GRACE_MS)
+  }
+
+  const onAbort = () => {
+    cancelled = true
+    terminateChild()
+  }
+  if (options.signal) {
+    if (options.signal.aborted) onAbort()
+    else options.signal.addEventListener("abort", onAbort, { once: true })
+  }
 
   const timer = options.timeoutMs
     ? setTimeout(() => {
         timedOut = true
-        child.kill()
+        terminateChild()
       }, options.timeoutMs)
     : undefined
 
@@ -95,7 +116,13 @@ export async function runDelegate(options: {
 
   const exitCode = await child.exited
   if (timer) clearTimeout(timer)
+  if (killTimer) clearTimeout(killTimer)
+  options.signal?.removeEventListener("abort", onAbort)
   await Promise.all([stdoutTask, stderrTask])
+
+  if (cancelled) {
+    throw new Error(`${options.binary} cancelled by user`)
+  }
 
   if (timedOut) {
     throw new Error(`${options.binary} timed out after ${options.timeoutMs}ms`)

@@ -9,6 +9,10 @@ export type RunDelegateFn = typeof runDelegate
 
 const SUMMARY_LINE_CAP = 50
 
+// Default per-run timeout for a delegate CLI invocation; a delegate config
+// may override it with its own timeoutMs.
+const DEFAULT_DELEGATE_TIMEOUT_MS = 10 * 60 * 1000
+
 // opencode agents confirmed (via live spike, see delegate-permission-passthrough/design.md)
 // to inject a system prompt that tells the model file edits/tool calls are forbidden.
 // opencode itself never blocks the call (no `permission.ask` event fires), so the
@@ -82,6 +86,8 @@ export function makeStartTool(
           args: resolvedArgs,
           parser: cfg.parser,
           onProgress: (text) => context.metadata({ title: name, metadata: { progress: text } }),
+          timeoutMs: cfg.timeoutMs ?? DEFAULT_DELEGATE_TIMEOUT_MS,
+          signal: context.abort,
         })
       } catch (err) {
         return `${name} failed: ${err instanceof Error ? err.message : String(err)}. Use /opencode to exit delegation.`
@@ -131,6 +137,8 @@ export function makeReplyTool(
           args: resolvedArgs,
           parser: cfg.parser,
           onProgress: (text) => context.metadata({ title: name, metadata: { progress: text } }),
+          timeoutMs: cfg.timeoutMs ?? DEFAULT_DELEGATE_TIMEOUT_MS,
+          signal: context.abort,
         })
       } catch (err) {
         return `${name} failed: ${err instanceof Error ? err.message : String(err)}. Use /opencode to exit delegation.`
