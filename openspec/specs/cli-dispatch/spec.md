@@ -48,11 +48,15 @@ While a delegated CLI subprocess is running, the system SHALL surface live progr
 - **THEN** the system updates opencode's UI with progress information parsed from codex's JSONL event stream before the task completes
 
 ### Requirement: Session state scoped per opencode session
-The system SHALL track, per opencode session, which delegate (if any) is currently active and that delegate's own thread/session identifier, so that concurrent opencode sessions do not share or overwrite each other's delegated conversations.
+The system SHALL track, per opencode session, which delegate (if any) is currently active and that delegate's own thread/session identifier, so that concurrent opencode sessions do not share or overwrite each other's delegated conversations. Capturing this identifier on `*_start` SHALL work uniformly for every configured delegate, regardless of whether that delegate's CLI assigns its own session/thread id and reports it back on the output stream, or whether opencode generates the id itself and passes it to the CLI at spawn time.
 
 #### Scenario: Two opencode sessions delegate independently
 - **WHEN** two separate opencode sessions each start a `/codex` delegation
 - **THEN** each session's follow-up messages continue its own codex thread id, independent of the other session's thread
+
+#### Scenario: Claude session id is captured on start
+- **WHEN** the user sends `/claude <task>` and no claude session exists yet for the current opencode session
+- **THEN** the system registers the claude session as active for that opencode session using the session id passed to the claude CLI at spawn time, so that a subsequent follow-up message successfully continues the same claude session instead of failing with "No active claude session"
 
 ### Requirement: Working-tree change summary in tool results
 After a `*_start` or `*_reply` delegation run completes, the system SHALL compare the git working tree before and after the run and, when files changed during the run, SHALL append a change summary to the tool result. The summary SHALL include `git diff --stat` output for tracked changes and the names of newly created untracked files.
@@ -97,3 +101,18 @@ When a delegate invocation fails, the system SHALL preserve the session's delega
 #### Scenario: Failure keeps state and hints at the exit
 - **WHEN** the user has an active claude delegation and a `claude_reply` invocation fails (delegate CLI error, missing binary, or expired auth)
 - **THEN** the delegation state is preserved for the session, and the error text returned to the user includes a hint to use `/opencode` to exit delegation
+
+### Requirement: Permission passthrough during active delegation
+While a session has an active delegation, opencode-side permission prompts that would otherwise block a delegate tool call (`*_start`/`*_reply`) SHALL either be resolved automatically without prompting the user, or, where no interceptable permission event exists, SHALL surface an explicit message identifying the blocking cause (e.g. the active agent) and pointing at `/opencode` as the way to recover — rather than a silent or confusing failure.
+
+#### Scenario: Permission ask is auto-resolved during active delegation
+- **WHEN** a session has an active claude delegation and an opencode `permission.ask` event fires for that session while a delegate tool call is in flight
+- **THEN** the system resolves the permission as allowed without prompting the user
+
+#### Scenario: Non-interceptable block surfaces an explicit message
+- **WHEN** a session has an active delegation, the current agent restricts delegate tool availability, and no permission event is emitted for the plugin to intercept
+- **THEN** the system returns a message naming the restrictive agent as the cause and instructs the user to switch agents or use `/opencode` to exit delegation, instead of a silent failure
+
+#### Scenario: No active delegation, default permission behavior is unchanged
+- **WHEN** a session has no active delegation
+- **THEN** permission prompts are handled by opencode's existing default behavior, unmodified by this plugin
