@@ -1,0 +1,56 @@
+{
+  "delegates": {
+    "claude": {
+      "binary": "claude",
+      "parser": "claude",
+      "startArgs": [
+        "-p",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "bypassPermissions",
+        "--session-id",
+        "{sessionId}",
+        "--",
+        "{prompt}"
+      ],
+      "replyArgs": [
+        "-p",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "bypassPermissions",
+        "--resume",
+        "{externalId}",
+        "--",
+        "{prompt}"
+      ]
+    },
+    "codex": {
+      "binary": "codex",
+      "parser": "codex",
+      "startArgs": [
+        "exec",
+        "--json",
+        "-c",
+        "sandbox_mode=workspace-write",
+        "--skip-git-repo-check",
+        "--",
+        "{prompt}"
+      ],
+      "replyArgs": [
+        "exec",
+        "resume",
+        "{externalId}",
+        "--json",
+        "-c",
+        "sandbox_mode=workspace-write",
+        "--skip-git-repo-check",
+        "--",
+        "{prompt}"
+      ]
+    }
+  }
+}
