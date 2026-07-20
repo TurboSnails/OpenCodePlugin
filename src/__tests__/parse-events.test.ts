@@ -89,10 +89,11 @@ describe("getParser", () => {
   describe("raw parser", () => {
     const parser = getParser("raw")
 
-    it("returns line as both progress and final text", () => {
+    it("returns each line as progress plus a final-text chunk to append", () => {
       const result = parser("any output line")
       expect(result.progressText).toBe("any output line")
       expect(result.finalText).toBe("any output line")
+      expect(result.appendFinalText).toBe(true)
     })
   })
 })

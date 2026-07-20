@@ -103,7 +103,9 @@ export async function runDelegate(options: {
       if (!line.trim()) continue
       const parsed = parseLine(line)
       if (parsed.externalId) externalId = parsed.externalId
-      if (parsed.finalText !== undefined) finalText = parsed.finalText
+      if (parsed.finalText !== undefined) {
+        finalText = parsed.appendFinalText && finalText ? `${finalText}\n${parsed.finalText}` : parsed.finalText
+      }
       if (parsed.progressText) options.onProgress(parsed.progressText)
     }
   })()

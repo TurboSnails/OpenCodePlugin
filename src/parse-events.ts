@@ -4,6 +4,10 @@ export type ParsedLine = {
   progressText?: string
   finalText?: string
   externalId?: string
+  // When true, finalText is a chunk to append (newline-joined) instead of
+  // replacing the text accumulated so far. Used by the raw parser, where
+  // every stdout line is part of the final text.
+  appendFinalText?: boolean
 }
 
 export type LineParser = (line: string) => ParsedLine
@@ -67,7 +71,7 @@ function parseCodexLine(line: string): ParsedLine {
 }
 
 function parseRawLine(line: string): ParsedLine {
-  return { progressText: line, finalText: line }
+  return { progressText: line, finalText: line, appendFinalText: true }
 }
 
 const PARSERS: Record<ParserName, LineParser> = {

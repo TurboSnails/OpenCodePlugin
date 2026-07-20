@@ -22,6 +22,31 @@ describe("runDelegate", () => {
     expect(result.finalText).toBe("PONG")
   })
 
+  it("concatenates all raw stdout lines as the final text", async () => {
+    const result = await runDelegate({
+      binary: "my-agent",
+      args: [],
+      parser: "raw",
+      onProgress: () => {},
+      spawn: fakeSpawn(["line one", "line two", "line three"]),
+    })
+    expect(result.finalText).toBe("line one\nline two\nline three")
+  })
+
+  it("keeps the last agent_message as the final text for the codex parser", async () => {
+    const result = await runDelegate({
+      binary: "codex",
+      args: [],
+      parser: "codex",
+      onProgress: () => {},
+      spawn: fakeSpawn([
+        '{"type":"item.completed","item":{"type":"agent_message","text":"first draft"}}',
+        '{"type":"item.completed","item":{"type":"agent_message","text":"final answer"}}',
+      ]),
+    })
+    expect(result.finalText).toBe("final answer")
+  })
+
   it("passes cwd through to spawn options", async () => {
     let received: SpawnOptions | undefined
     const spawn: SpawnFn = (_binary, _args, options) => {

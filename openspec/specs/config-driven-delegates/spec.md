@@ -82,4 +82,4 @@ The system SHALL use the specified parser for each delegate: "claude" for Claude
 
 #### Scenario: Raw parser
 - **WHEN** delegate uses parser "raw"
-- **THEN** the system captures all stdout lines and concatenates them as the final text
+- **THEN** the system captures all stdout lines and concatenates them (joined with newlines, in order) as the final text
