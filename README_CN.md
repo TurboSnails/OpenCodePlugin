@@ -34,7 +34,9 @@
 
 ## 打包
 
-这个仓库目前还没有发布到任何 npm registry，所以先在本地打出一个 tarball 供其他项目安装：
+`dist/` 目录已经提交进本仓库（没有被 gitignore），目的就是让这个包可以直接从 git 地址安装（见下方[方式三](#方式三一次性全局安装所有项目通用)），不需要在安装时再跑一次构建——因为 OpenCode 的 npm/git 插件安装器（底层用 Bun）默认**不会**执行 `prepare`/`postinstall` 之类的生命周期脚本。**以后改动 `src/` 下的代码时，请在同一次改动里重新构建并一并提交 `dist/`**，否则通过 git 安装的用户会一直用到旧的编译产物。
+
+这个仓库目前还没有发布到任何 npm registry，如果想在不走 git 的情况下安装到别处，可以先在本地打出一个 tarball：
 
 ```bash
 bun install          # 安装依赖
@@ -93,6 +95,33 @@ export default createCliDispatchPlugin()
 
 - `configPath` — 覆盖 delegate 配置的读取路径（见下文）。
 - `options.commandsDir` — 如果设置，每次插件加载时都会把 `/{name}` 和 `/opencode` 这些 slash 命令文件重新生成到该目录（默认使用已提交在 `.opencode/command/` 下的文件）。
+
+### 方式三：一次性全局安装（所有项目通用）
+
+上面两种方式都是按项目装的。OpenCode 还有一个全局配置目录 `~/.config/opencode/`，对你打开的所有项目都生效——如果不想每个仓库都重复配置一遍，装这里就够了。以下内容已对照 [OpenCode 官方 plugin 文档](https://opencode.ai/docs/plugins/) 和 [commands 文档](https://opencode.ai/docs/commands/) 核实，并且在一台真实机器上和 `~/.config/opencode/opencode.jsonc`、`~/.config/opencode/plugins/` 的实际内容做了交叉验证——这两个目录目前正在被实际使用（例如 `superpowers` 插件就是用同样的方式加载的）。
+
+**1. 在全局配置里注册插件**，写进 `~/.config/opencode/opencode.json` 或 `opencode.jsonc`：
+
+```json
+{
+  "plugin": ["opencode-cli-dispatch@github:TurboSnails/OpenCodePlugin"]
+}
+```
+
+OpenCode 会在启动时用 Bun 自动安装 npm/git 形式的插件依赖，缓存在 `~/.cache/opencode/` 下。因为 `dist/` 已经提交进本仓库（见[打包](#打包)一节），单纯的 git checkout 就够用了——安装过程中不会、也不需要再跑一次构建。
+
+如果以后发布到 npm 了，这一步可以简化成 `"plugin": ["opencode-cli-dispatch"]`。
+
+**2. slash 命令也需要装到全局。** OpenCode 会从 `~/.config/opencode/commands/` 读取 markdown 命令文件，对所有项目生效（[文档](https://opencode.ai/docs/commands/)）。把本仓库的 `.opencode/command/cc.md`、`codex.md`、`opencode.md` 复制过去：
+
+```bash
+mkdir -p ~/.config/opencode/commands
+cp .opencode/command/*.md ~/.config/opencode/commands/
+```
+
+（目前没有办法让通过 npm 安装的插件自动把 `createCliDispatchPlugin` 的 `commandsDir` 指向这个全局目录——它只会相对于调用时传入的路径生效。在这个能力补上之前，手动复制是最可靠的办法。）
+
+**3. 全局安装仍然需要各项目自己的 delegate 配置文件。** `cli-dispatch.config.json` 的查找路径（见[配置](#配置)一节）是相对于 `process.cwd()`，也就是你当前所在的项目，而不是 `~/.config/opencode/`。如果某个项目下没有配置文件，插件会退回到内置的 `claude` + `codex` 默认配置，大多数情况下这样就够用了。如果你想让所有项目都用自定义的 delegate/参数，要么在每个项目里各放一份 `cli-dispatch.config.json`，要么改用方式二（本地插件文件）从一个薄封装文件里显式传入绝对路径的 `configPath`，而不是走纯全局 npm 安装这条路。
 
 ## 配置
 
