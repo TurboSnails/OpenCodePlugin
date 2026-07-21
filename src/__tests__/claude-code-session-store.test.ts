@@ -40,4 +40,22 @@ describe("claude code session store", () => {
     expect(() => clearActiveDelegate("cc-session-never-set")).not.toThrow()
     expect(getActiveDelegate("cc-session-never-set")).toBeUndefined()
   })
+
+  it("rejects a session id containing a path separator", () => {
+    expect(() => getActiveDelegate("../etc/passwd")).toThrow("Invalid session id")
+    expect(() => setActiveDelegate("foo/bar", "codex", "thread-1")).toThrow("Invalid session id")
+  })
+
+  it("rejects a session id containing ..", () => {
+    expect(() => getActiveDelegate("cc-session-..-traversal")).toThrow("Invalid session id")
+    expect(() => setActiveDelegate("..", "codex", "thread-1")).toThrow("Invalid session id")
+  })
+
+  it("accepts a normal UUID-shaped session id", () => {
+    const sessionId = "3234593f-2097-4e5b-a1fc-e125e1a87c1e"
+    setActiveDelegate(sessionId, "codex", "thread-uuid")
+    const result = getActiveDelegate(sessionId)
+    expect(result?.delegate).toBe("codex")
+    expect(result?.externalId).toBe("thread-uuid")
+  })
 })

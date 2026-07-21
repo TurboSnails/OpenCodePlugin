@@ -13,7 +13,14 @@ type StoredState = {
 
 const STATE_DIR = join(tmpdir(), "cli-dispatch-claude-code-adapter")
 
+function assertValidSessionId(sessionId: string): void {
+  if (sessionId.includes("/") || sessionId.includes("\\") || sessionId.includes("..")) {
+    throw new Error(`Invalid session id: ${sessionId}`)
+  }
+}
+
 function statePath(sessionId: string): string {
+  assertValidSessionId(sessionId)
   return join(STATE_DIR, `${sessionId}.json`)
 }
 
