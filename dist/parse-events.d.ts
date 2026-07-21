@@ -3,6 +3,7 @@ export type ParsedLine = {
     progressText?: string;
     finalText?: string;
     externalId?: string;
+    appendFinalText?: boolean;
 };
 export type LineParser = (line: string) => ParsedLine;
 export declare function getParser(name: ParserName): LineParser;

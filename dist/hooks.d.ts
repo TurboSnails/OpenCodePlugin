@@ -1,3 +1,4 @@
+import { type CliDispatchConfig } from "./config";
 type SystemTransformInput = {
     sessionID?: string;
 };
@@ -15,6 +16,10 @@ export declare function rewriteMentionBoilerplate(parts: PartLike[]): void;
 type ChatMessageInput = {
     sessionID: string;
     agent?: string;
+    model?: {
+        providerID: string;
+        modelID: string;
+    };
 };
 type ChatMessageOutput = {
     parts: PartLike[];
@@ -31,6 +36,15 @@ type CommandBeforeOutput = {
         synthetic?: boolean;
     }>;
 };
-export declare function makeCommandBefore(): (input: CommandBeforeInput, output: CommandBeforeOutput) => Promise<void>;
+export declare function makeCommandBefore(config: CliDispatchConfig): (input: CommandBeforeInput, output: CommandBeforeOutput) => Promise<void>;
+type ToolExecuteBeforeInput = {
+    tool: string;
+    sessionID: string;
+    callID: string;
+};
+type ToolExecuteBeforeOutput = {
+    args: any;
+};
+export declare function makeToolExecuteBefore(config: CliDispatchConfig): (input: ToolExecuteBeforeInput, output: ToolExecuteBeforeOutput) => Promise<void>;
 export {};
 //# sourceMappingURL=hooks.d.ts.map

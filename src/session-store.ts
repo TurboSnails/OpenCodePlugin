@@ -3,8 +3,14 @@ export type DelegateSession = {
   externalId: string
 }
 
+export type SessionModel = {
+  providerID: string
+  modelID: string
+}
+
 const sessions = new Map<string, DelegateSession>()
 const sessionAgents = new Map<string, string>()
+const sessionModels = new Map<string, SessionModel>()
 const startSequences = new Map<string, number>()
 
 export function getActiveDelegate(opencodeSessionID: string): DelegateSession | undefined {
@@ -38,4 +44,12 @@ export function getSessionAgent(opencodeSessionID: string): string | undefined {
 
 export function setSessionAgent(opencodeSessionID: string, agent: string): void {
   sessionAgents.set(opencodeSessionID, agent)
+}
+
+export function getSessionModel(opencodeSessionID: string): SessionModel | undefined {
+  return sessionModels.get(opencodeSessionID)
+}
+
+export function setSessionModel(opencodeSessionID: string, model: SessionModel): void {
+  sessionModels.set(opencodeSessionID, model)
 }

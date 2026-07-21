@@ -174,6 +174,27 @@ Each delegate entry:
 
 Adding a new delegate is just adding another entry — a `/{name}` command, and `{name}_start` / `{name}_reply` / `{name}_check` tools, are generated automatically for every key under `delegates`.
 
+### Verified models
+
+Sticky delegation and prompt forwarding rely on the model itself following instructions injected via system prompt and command text — there is no OpenCode mechanism that forces a model to call a specific tool (see [Known limitations](#known-limitations)). Some models don't follow this contract; an optional top-level `verifiedModels` allow-list lets the plugin refuse to start a delegation for a model that hasn't been confirmed to work, instead of silently misbehaving:
+
+```json
+{
+  "delegates": { "...": "..." },
+  "verifiedModels": ["anthropic/*", "moonshotai/kimi-for-coding-k3"]
+}
+```
+
+Each entry is a `provider/model` string; either segment may end in a trailing `*` wildcard (`anthropic/*` matches every Anthropic model; `*/k3` matches `k3` on any provider). Matching is case-sensitive and exact otherwise — no other glob syntax is supported.
+
+- **Omitted or empty**: no restriction — every model may start a delegation. This is the default; existing configs need no changes.
+- **Configured and non-empty**: when a user issues a delegate-start command (e.g. `/claude`, `/cc`) and the session's current model matches no entry, the plugin blocks the command before `{name}_start` is ever called and returns a message naming the model instead.
+- **Unknown model**: OpenCode only reports the active model on `chat.message`, which fires *after* `command.execute.before` for a session's very first message ever sent — so on that first command the model is not yet known to the plugin. This case fails open (the command proceeds) rather than blocking every brand-new session; the gate applies starting with that session's second delegate-start command onward.
+
+This does not, and cannot, guarantee a model calls `{name}_reply` on every sticky follow-up — no hook fires when a model answers with plain text and calls no tool at all. It narrows the failure to "known-bad models are blocked at the door," not "every model is forced to comply."
+
+A separate, always-on check rejects a `{name}_start`/`{name}_reply` call whose `prompt` argument contains the whole delegate command template (detected by an internal marker) instead of the user's actual message — this is independent of `verifiedModels` and applies regardless of configuration.
+
 ### Config errors and the `cli_dispatch_status` tool
 
 Validation rejects a config when any delegate name doesn't match `/^[\w-]+$/` (letters, digits, underscore, hyphen — anything else would produce invalid tool names), when `binary`/`parser` are missing or invalid, when `startArgs` isn't a string array or doesn't contain the `{prompt}` placeholder (without it the CLI would run with no task), or when `timeoutMs` isn't a positive number. A `replyArgs` without `{externalId}` only logs a warning — a raw delegate with no session concept may legitimately have nothing to resume.
@@ -228,6 +249,8 @@ Delegate subprocesses run in the session's project directory (the `directory` Op
 ### Known limitations
 
 Some models don't reliably follow the injected sticky-routing system prompt. Verified 2026-07-19: MiniMax-M3 (`minimax-cn` / `minimaxi-cn`) forwards the entire expanded command template as the prompt instead of just the user's arguments (causing the delegate to refuse as a suspected prompt injection), and ignores the sticky routing rule on plain follow-ups, answering directly instead of calling `{name}_reply`. Kimi (`kimi-for-coding/k3`) has been verified to work correctly with this plugin.
+
+This is now mitigated, not just documented: configure [`verifiedModels`](#verified-models) to have the plugin refuse to start a delegation for a model that isn't on the allow-list, and the plugin always rejects a `prompt` argument that is the whole forwarded command template regardless of configuration (see [Verified models](#verified-models)). Neither mechanism can force a model to call `{name}_reply` on a sticky follow-up if it chooses to answer with plain text and call no tool at all — no OpenCode hook fires for that case — so a model still needs to be reasonably instruction-following for the sticky (not just the initial) part of delegation to work.
 
 If multiple `{name}_start` calls run concurrently within the same session, the latest initiated start wins: an earlier start that finishes later will not overwrite the newer delegation.
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test"
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs"
 import { join } from "path"
-import { loadConfig, resolveArgs } from "../config"
+import { loadConfig, resolveArgs, isValidVerifiedModelEntry, matchesVerifiedModel } from "../config"
 
 const TEST_DIR = join(import.meta.dir, "__test_config__")
 
@@ -240,6 +240,143 @@ describe("loadConfig", () => {
     )
 
     expect(() => loadConfig(configPath)).toThrow("Invalid config")
+  })
+
+  it("accepts config without verifiedModels", () => {
+    const configPath = join(TEST_DIR, "no-verified-models.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: { binary: "myagent", parser: "raw", startArgs: ["--", "{prompt}"], replyArgs: ["--", "{prompt}"] },
+        },
+      }),
+    )
+
+    const config = loadConfig(configPath)
+    expect(config.verifiedModels).toBeUndefined()
+  })
+
+  it("accepts a valid verifiedModels list", () => {
+    const configPath = join(TEST_DIR, "verified-models.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: { binary: "myagent", parser: "raw", startArgs: ["--", "{prompt}"], replyArgs: ["--", "{prompt}"] },
+        },
+        verifiedModels: ["anthropic/*", "moonshotai/kimi-for-coding-k3"],
+      }),
+    )
+
+    const config = loadConfig(configPath)
+    expect(config.verifiedModels).toEqual(["anthropic/*", "moonshotai/kimi-for-coding-k3"])
+  })
+
+  it("throws when verifiedModels is not an array", () => {
+    const configPath = join(TEST_DIR, "verified-models-not-array.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: { binary: "myagent", parser: "raw", startArgs: ["--", "{prompt}"], replyArgs: ["--", "{prompt}"] },
+        },
+        verifiedModels: "anthropic/*",
+      }),
+    )
+
+    expect(() => loadConfig(configPath)).toThrow(/verifiedModels/)
+  })
+
+  it("throws on a verifiedModels entry missing the provider/model shape", () => {
+    const configPath = join(TEST_DIR, "verified-models-bad-shape.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: { binary: "myagent", parser: "raw", startArgs: ["--", "{prompt}"], replyArgs: ["--", "{prompt}"] },
+        },
+        verifiedModels: ["not-a-provider-model-pair"],
+      }),
+    )
+
+    expect(() => loadConfig(configPath)).toThrow(/verifiedModels/)
+    expect(() => loadConfig(configPath)).toThrow(/not-a-provider-model-pair/)
+  })
+
+  it("throws on a non-string verifiedModels entry", () => {
+    const configPath = join(TEST_DIR, "verified-models-non-string.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: { binary: "myagent", parser: "raw", startArgs: ["--", "{prompt}"], replyArgs: ["--", "{prompt}"] },
+        },
+        verifiedModels: [42],
+      }),
+    )
+
+    expect(() => loadConfig(configPath)).toThrow(/verifiedModels/)
+  })
+})
+
+describe("isValidVerifiedModelEntry", () => {
+  it("accepts an exact provider/model pair", () => {
+    expect(isValidVerifiedModelEntry("anthropic/claude-sonnet-4-5")).toBe(true)
+  })
+
+  it("accepts a trailing wildcard on either segment", () => {
+    expect(isValidVerifiedModelEntry("anthropic/*")).toBe(true)
+    expect(isValidVerifiedModelEntry("*/kimi-for-coding-k3")).toBe(true)
+    expect(isValidVerifiedModelEntry("*/*")).toBe(true)
+  })
+
+  it("rejects entries without exactly one slash", () => {
+    expect(isValidVerifiedModelEntry("anthropic")).toBe(false)
+    expect(isValidVerifiedModelEntry("anthropic/claude/extra")).toBe(false)
+  })
+
+  it("rejects non-string entries", () => {
+    expect(isValidVerifiedModelEntry(42)).toBe(false)
+    expect(isValidVerifiedModelEntry(null)).toBe(false)
+    expect(isValidVerifiedModelEntry(["anthropic", "claude"])).toBe(false)
+  })
+
+  it("rejects empty segments", () => {
+    expect(isValidVerifiedModelEntry("/claude")).toBe(false)
+    expect(isValidVerifiedModelEntry("anthropic/")).toBe(false)
+  })
+})
+
+describe("matchesVerifiedModel", () => {
+  const model = { providerID: "anthropic", modelID: "claude-sonnet-4-5" }
+
+  it("matches an exact provider/model pattern", () => {
+    expect(matchesVerifiedModel(model, ["anthropic/claude-sonnet-4-5"])).toBe(true)
+  })
+
+  it("matches a trailing wildcard on the model segment", () => {
+    expect(matchesVerifiedModel(model, ["anthropic/*"])).toBe(true)
+  })
+
+  it("matches a trailing wildcard on the provider segment", () => {
+    expect(matchesVerifiedModel(model, ["*/claude-sonnet-4-5"])).toBe(true)
+  })
+
+  it("matches a partial trailing wildcard", () => {
+    expect(matchesVerifiedModel(model, ["anthropic/claude-*"])).toBe(true)
+  })
+
+  it("does not match when no pattern applies", () => {
+    expect(matchesVerifiedModel(model, ["minimax-cn/*", "kimi-for-coding/k3"])).toBe(false)
+  })
+
+  it("is case-sensitive", () => {
+    expect(matchesVerifiedModel(model, ["Anthropic/*"])).toBe(false)
+  })
+
+  it("returns false for an empty pattern list", () => {
+    expect(matchesVerifiedModel(model, [])).toBe(false)
   })
 })
 

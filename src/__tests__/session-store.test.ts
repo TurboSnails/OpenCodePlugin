@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test"
-import { getActiveDelegate, setActiveDelegate, clearActiveDelegate, getSessionAgent, setSessionAgent } from "../session-store"
+import { getActiveDelegate, setActiveDelegate, clearActiveDelegate, getSessionAgent, setSessionAgent, getSessionModel, setSessionModel } from "../session-store"
 
 describe("session-store", () => {
   beforeEach(() => {
@@ -63,5 +63,22 @@ describe("session agent cache", () => {
     setSessionAgent("agent-session-2", "plan")
     setSessionAgent("agent-session-2", "build")
     expect(getSessionAgent("agent-session-2")).toBe("build")
+  })
+})
+
+describe("session model cache", () => {
+  it("returns undefined for a session with no cached model", () => {
+    expect(getSessionModel("model-nonexistent")).toBeUndefined()
+  })
+
+  it("sets and gets the cached model for a session", () => {
+    setSessionModel("model-session-1", { providerID: "anthropic", modelID: "claude-sonnet-4-5" })
+    expect(getSessionModel("model-session-1")).toEqual({ providerID: "anthropic", modelID: "claude-sonnet-4-5" })
+  })
+
+  it("overwrites the cached model for the same session", () => {
+    setSessionModel("model-session-2", { providerID: "anthropic", modelID: "claude-sonnet-4-5" })
+    setSessionModel("model-session-2", { providerID: "minimax-cn", modelID: "MiniMax-M2.5" })
+    expect(getSessionModel("model-session-2")).toEqual({ providerID: "minimax-cn", modelID: "MiniMax-M2.5" })
   })
 })

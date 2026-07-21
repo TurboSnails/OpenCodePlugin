@@ -1,5 +1,31 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
+// Each segment is one or more word/dot/hyphen characters, or a lone "*",
+// optionally ending in a trailing "*" wildcard (e.g. "anthropic", "*",
+// "kimi-for-coding-k3*").
+const VERIFIED_MODEL_SEGMENT_RE = /^(\*|[\w.-]+\*?)$/;
+export function isValidVerifiedModelEntry(entry) {
+    if (typeof entry !== "string")
+        return false;
+    const parts = entry.split("/");
+    if (parts.length !== 2)
+        return false;
+    const [provider, model] = parts;
+    return VERIFIED_MODEL_SEGMENT_RE.test(provider) && VERIFIED_MODEL_SEGMENT_RE.test(model);
+}
+function matchesSegment(actual, pattern) {
+    if (pattern === "*")
+        return true;
+    if (pattern.endsWith("*"))
+        return actual.startsWith(pattern.slice(0, -1));
+    return actual === pattern;
+}
+export function matchesVerifiedModel(model, patterns) {
+    return patterns.some((pattern) => {
+        const [provider, modelPattern] = pattern.split("/");
+        return matchesSegment(model.providerID, provider) && matchesSegment(model.modelID, modelPattern);
+    });
+}
 const DEFAULT_CONFIG = {
     delegates: {
         claude: {
@@ -49,38 +75,61 @@ const DEFAULT_CONFIG = {
     },
 };
 function validateConfig(config) {
+    const errors = [];
     if (typeof config !== "object" || config === null) {
-        return false;
+        return ["config must be an object"];
     }
     const obj = config;
     if (typeof obj.delegates !== "object" || obj.delegates === null) {
-        return false;
+        return ['"delegates" must be an object'];
+    }
+    if (obj.verifiedModels !== undefined) {
+        if (!Array.isArray(obj.verifiedModels)) {
+            errors.push('"verifiedModels" must be an array of "provider/model" strings');
+        }
+        else {
+            for (const entry of obj.verifiedModels) {
+                if (!isValidVerifiedModelEntry(entry)) {
+                    errors.push(`"verifiedModels" entry ${JSON.stringify(entry)} must be a "provider/model" string, each segment optionally ending in a trailing "*" wildcard`);
+                }
+            }
+        }
     }
     const delegates = obj.delegates;
     for (const [name, delegate] of Object.entries(delegates)) {
+        if (!/^[\w-]+$/.test(name)) {
+            errors.push(`delegate "${name}": name must match /^[\\w-]+$/ (letters, digits, underscore, hyphen) or it would produce invalid tool names`);
+        }
         if (typeof delegate !== "object" || delegate === null) {
-            console.error(`Invalid delegate config for "${name}": must be an object`);
-            return false;
+            errors.push(`delegate "${name}": must be an object`);
+            continue;
         }
         const d = delegate;
         if (typeof d.binary !== "string") {
-            console.error(`Invalid delegate config for "${name}": missing or invalid "binary" field`);
-            return false;
+            errors.push(`delegate "${name}": missing or invalid "binary" field`);
         }
         if (typeof d.parser !== "string" || !["claude", "codex", "raw"].includes(d.parser)) {
-            console.error(`Invalid delegate config for "${name}": "parser" must be "claude", "codex", or "raw"`);
-            return false;
+            errors.push(`delegate "${name}": "parser" must be "claude", "codex", or "raw"`);
         }
         if (!Array.isArray(d.startArgs) || !d.startArgs.every((a) => typeof a === "string")) {
-            console.error(`Invalid delegate config for "${name}": "startArgs" must be an array of strings`);
-            return false;
+            errors.push(`delegate "${name}": "startArgs" must be an array of strings`);
+        }
+        else if (!d.startArgs.some((a) => a.includes("{prompt}"))) {
+            errors.push(`delegate "${name}": "startArgs" must contain the {prompt} placeholder, otherwise the CLI runs without the user's task`);
         }
         if (!Array.isArray(d.replyArgs) || !d.replyArgs.every((a) => typeof a === "string")) {
-            console.error(`Invalid delegate config for "${name}": "replyArgs" must be an array of strings`);
-            return false;
+            errors.push(`delegate "${name}": "replyArgs" must be an array of strings`);
+        }
+        else if (!d.replyArgs.some((a) => a.includes("{externalId}"))) {
+            // Warning only: a raw delegate without any session concept may
+            // legitimately have nothing to resume.
+            console.warn(`[cli-dispatch] delegate "${name}": "replyArgs" has no {externalId} placeholder; ${name}_reply will not be able to resume a session`);
+        }
+        if (d.timeoutMs !== undefined && (typeof d.timeoutMs !== "number" || !(d.timeoutMs > 0))) {
+            errors.push(`delegate "${name}": "timeoutMs" must be a positive number`);
         }
     }
-    return true;
+    return errors;
 }
 export function loadConfig(configPath) {
     const searchPaths = configPath
@@ -95,8 +144,9 @@ export function loadConfig(configPath) {
             try {
                 const raw = readFileSync(path, "utf-8");
                 const config = JSON.parse(raw);
-                if (!validateConfig(config)) {
-                    throw new Error(`Invalid config at ${path}`);
+                const errors = validateConfig(config);
+                if (errors.length > 0) {
+                    throw new Error(`Invalid config at ${path}:\n  - ${errors.join("\n  - ")}`);
                 }
                 return config;
             }

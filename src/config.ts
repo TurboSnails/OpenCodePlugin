@@ -13,6 +13,33 @@ export interface DelegateConfig {
 
 export interface CliDispatchConfig {
   delegates: Record<string, DelegateConfig>
+  verifiedModels?: string[]
+}
+
+// Each segment is one or more word/dot/hyphen characters, or a lone "*",
+// optionally ending in a trailing "*" wildcard (e.g. "anthropic", "*",
+// "kimi-for-coding-k3*").
+const VERIFIED_MODEL_SEGMENT_RE = /^(\*|[\w.-]+\*?)$/
+
+export function isValidVerifiedModelEntry(entry: unknown): entry is string {
+  if (typeof entry !== "string") return false
+  const parts = entry.split("/")
+  if (parts.length !== 2) return false
+  const [provider, model] = parts
+  return VERIFIED_MODEL_SEGMENT_RE.test(provider) && VERIFIED_MODEL_SEGMENT_RE.test(model)
+}
+
+function matchesSegment(actual: string, pattern: string): boolean {
+  if (pattern === "*") return true
+  if (pattern.endsWith("*")) return actual.startsWith(pattern.slice(0, -1))
+  return actual === pattern
+}
+
+export function matchesVerifiedModel(model: { providerID: string; modelID: string }, patterns: string[]): boolean {
+  return patterns.some((pattern) => {
+    const [provider, modelPattern] = pattern.split("/")
+    return matchesSegment(model.providerID, provider) && matchesSegment(model.modelID, modelPattern)
+  })
 }
 
 const DEFAULT_CONFIG: CliDispatchConfig = {
@@ -74,6 +101,18 @@ function validateConfig(config: unknown): string[] {
   const obj = config as Record<string, unknown>
   if (typeof obj.delegates !== "object" || obj.delegates === null) {
     return ['"delegates" must be an object']
+  }
+
+  if (obj.verifiedModels !== undefined) {
+    if (!Array.isArray(obj.verifiedModels)) {
+      errors.push('"verifiedModels" must be an array of "provider/model" strings')
+    } else {
+      for (const entry of obj.verifiedModels) {
+        if (!isValidVerifiedModelEntry(entry)) {
+          errors.push(`"verifiedModels" entry ${JSON.stringify(entry)} must be a "provider/model" string, each segment optionally ending in a trailing "*" wildcard`)
+        }
+      }
+    }
   }
 
   const delegates = obj.delegates as Record<string, unknown>

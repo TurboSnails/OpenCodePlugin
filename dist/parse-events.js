@@ -48,7 +48,7 @@ function parseCodexLine(line) {
     return {};
 }
 function parseRawLine(line) {
-    return { progressText: line, finalText: line };
+    return { progressText: line, finalText: line, appendFinalText: true };
 }
 const PARSERS = {
     claude: parseClaudeLine,

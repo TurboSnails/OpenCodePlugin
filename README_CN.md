@@ -174,6 +174,27 @@ delegate 的行为由 `cli-dispatch.config.json` 定义，按以下顺序解析�
 
 新增一个 delegate 只需要在 `delegates` 下新增一个条目——对应的 `/{name}` 命令，以及 `{name}_start` / `{name}_reply` / `{name}_check` 三个工具都会自动生成。
 
+### 已验证模型 verifiedModels
+
+粘性委托和 prompt 转发依赖模型自己遵循通过系统提示词和命令文本注入的约定——OpenCode 没有任何机制能强制模型调用指定工具（见[已知限制](#已知限制)）。部分模型并不遵守这个约定；可选的顶层字段 `verifiedModels` 是一份白名单，配置后插件会拒绝为不在名单上的模型启动委托，而不是任由它默默出错：
+
+```json
+{
+  "delegates": { "...": "..." },
+  "verifiedModels": ["anthropic/*", "moonshotai/kimi-for-coding-k3"]
+}
+```
+
+每一项是 `provider/model` 形式的字符串；任意一段都可以以 `*` 结尾做通配（`anthropic/*` 匹配所有 Anthropic 模型；`*/k3` 匹配任意 provider 下的 `k3`）。匹配区分大小写，除尾部通配符外不支持其他 glob 语法。
+
+- **不配置或配置为空数组**：不做任何限制——所有模型都可以启动委托。这是默认行为,已有配置无需改动。
+- **配置且非空**：当用户执行某个 delegate-start 命令(如 `/claude`、`/cc`)且该会话当前模型不匹配任何一项时,插件会在 `{name}_start` 被调用之前就拦截该命令,返回一条说明当前模型的消息。
+- **模型未知的情况**：OpenCode 只在 `chat.message` 时报告当前模型,而这个 hook 在会话的第一条消息上是晚于 `command.execute.before` 触发的——所以会话的第一条 delegate-start 命令执行时,插件还不知道当前模型是什么。这种情况下按"放行"处理(fail open),而不是让每个全新会话的第一条命令都被拦下;从该会话的第二条 delegate-start 命令起,白名单才会真正生效。
+
+这套机制无法、也不能保证模型在每一次粘性 follow-up 时都调用 `{name}_reply`——如果模型选择直接输出文字、完全不调用任何工具,没有任何 hook 会被触发。它能做到的是"已知有问题的模型被挡在门外",而不是"强制所有模型都乖乖配合"。
+
+另有一个始终生效、与 `verifiedModels` 是否配置无关的检查:如果 `{name}_start`/`{name}_reply` 的 `prompt` 参数里包含了整段委托命令模板(通过内部标记识别),而不是用户的真实消息,调用会被拒绝。
+
 ### 配置错误与 `cli_dispatch_status` 工具
 
 出现以下情况时配置校验会失败：delegate 名称不匹配 `/^[\w-]+$/`（只允许字母、数字、下划线、连字符，否则生成的工具名非法）、`binary`/`parser` 缺失或非法、`startArgs` 不是字符串数组或缺少 `{prompt}` 占位符（没有它 CLI 会在没有任何任务内容的情况下运行）、`timeoutMs` 不是正数。而 `replyArgs` 缺少 `{externalId}` 只会打印一条警告——对没有会话概念的 raw delegate 来说，没有可续接的会话是合理的。
@@ -228,6 +249,8 @@ delegate 子进程在会话的项目目录（OpenCode 在工具上下文中提�
 ### 已知限制
 
 部分模型无法可靠地遵循注入的粘性路由系统提示词。经过验证（2026-07-19）：MiniMax-M3（`minimax-cn` / `minimaxi-cn`，某些环境下 `opencode serve` 的默认模型）会把展开后的整个命令模板当作 prompt 转发给 `{name}_start`（而不是只转发 `/cc`、`/codex` 后面的用户输入），导致 delegate 把它当作疑似 prompt injection 而拒绝执行；并且在纯文本 follow-up 时会忽略粘性路由规则，直接自己作答而不是调用 `{name}_reply`——即便路由规则是中英双语且重复注入的情况下依然如此。Kimi（`kimi-for-coding/k3`）已验证可以正常配合本插件工作。
+
+现在这个问题不再只是"记录在文档里"，而是有了实际缓解手段：配置 [`verifiedModels`](#已验证模型-verifiedmodels) 可以让插件拒绝为不在白名单上的模型启动委托；而 prompt 参数被整段命令模板污染的情况，插件始终会拒绝，与配置无关（见[已验证模型](#已验证模型-verifiedmodels)）。但这两个机制都无法强制一个选择直接输出文字、完全不调用任何工具的模型去调用 `{name}_reply`——这种情况下没有任何 OpenCode hook 会被触发——所以粘性委托里"续接"这部分，仍然要求模型本身有基本的指令遵从能力。
 
 同一会话内如果并发发起多个 `{name}_start`，以最新发起的为准：先发起但后完成的调用不会覆盖更新的委托。
 

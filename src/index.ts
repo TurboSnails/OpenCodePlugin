@@ -1,15 +1,15 @@
 import type { Plugin, Hooks } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
-import { loadConfig } from "./config"
+import { loadConfig, type CliDispatchConfig } from "./config"
 import { makeStartTool, makeReplyTool } from "./delegate-tools"
 import { makeCheckTool } from "./health-check"
-import { makeSystemTransform, makeChatMessage, makeCommandBefore } from "./hooks"
+import { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore } from "./hooks"
 import { generateCommands } from "./commands"
 
 export type { CliDispatchConfig, DelegateConfig, ParserName } from "./config"
 export { loadConfig, resolveArgs } from "./config"
 export { makeStartTool, makeReplyTool } from "./delegate-tools"
-export { makeSystemTransform, makeChatMessage, makeCommandBefore } from "./hooks"
+export { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore } from "./hooks"
 export { generateCommands } from "./commands"
 export { runDelegate, defaultSpawn } from "./run-delegate"
 export { getActiveDelegate, setActiveDelegate, clearActiveDelegate } from "./session-store"
@@ -20,9 +20,10 @@ export { checkDelegate, makeCheckTool } from "./health-check"
 export function createCliDispatchPlugin(configPath?: string, options?: { commandsDir?: string }): Plugin {
   return async () => {
     let tools: NonNullable<Hooks["tool"]>
+    let config: CliDispatchConfig
 
     try {
-      const config = loadConfig(configPath)
+      config = loadConfig(configPath)
 
       if (options?.commandsDir) {
         generateCommands(config, options.commandsDir)
@@ -40,6 +41,7 @@ export function createCliDispatchPlugin(configPath?: string, options?: { command
       console.error("[cli-dispatch] Failed to load config:", err)
       // Degrade to a single diagnostic tool so users can discover why no
       // delegate tools were registered instead of hitting "tool not found".
+      config = { delegates: {} }
       tools = { cli_dispatch_status: makeStatusTool(err) }
     }
 
@@ -47,7 +49,8 @@ export function createCliDispatchPlugin(configPath?: string, options?: { command
       tool: tools,
       "experimental.chat.system.transform": makeSystemTransform(),
       "chat.message": makeChatMessage(),
-      "command.execute.before": makeCommandBefore(),
+      "command.execute.before": makeCommandBefore(config),
+      "tool.execute.before": makeToolExecuteBefore(config),
     }
   }
 }
