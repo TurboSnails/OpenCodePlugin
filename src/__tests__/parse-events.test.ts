@@ -9,7 +9,7 @@ describe("getParser", () => {
     ["event with required fields missing", '{"type":"assistant"}'],
   ]
 
-  for (const parserName of ["claude", "codex"] as const) {
+  for (const parserName of ["claude", "codex", "opencode"] as const) {
     const parser = getParser(parserName)
 
     for (const [description, line] of malformedEvents) {
@@ -83,6 +83,43 @@ describe("getParser", () => {
       })
       const result = parser(line)
       expect(result.progressText).toBe("running: npm test")
+    })
+  })
+
+  describe("opencode parser", () => {
+    const parser = getParser("opencode")
+
+    it("extracts the session id from any event line", () => {
+      const line = JSON.stringify({
+        type: "step_start",
+        sessionID: "ses_abc123",
+        part: { type: "step-start" },
+      })
+      const result = parser(line)
+      expect(result.externalId).toBe("ses_abc123")
+    })
+
+    it("accumulates text events as final text, in order", () => {
+      const first = parser(JSON.stringify({ type: "text", sessionID: "ses_1", part: { type: "text", text: "Hello" } }))
+      expect(first.finalText).toBe("Hello")
+      expect(first.appendFinalText).toBe(true)
+
+      const second = parser(JSON.stringify({ type: "text", sessionID: "ses_1", part: { type: "text", text: "World" } }))
+      expect(second.finalText).toBe("World")
+      expect(second.appendFinalText).toBe(true)
+    })
+
+    it("surfaces text events as progress too", () => {
+      const line = JSON.stringify({ type: "text", sessionID: "ses_1", part: { type: "text", text: "working..." } })
+      const result = parser(line)
+      expect(result.progressText).toBe("working...")
+    })
+
+    it("ignores unrelated event types", () => {
+      const line = JSON.stringify({ type: "step_finish", sessionID: "ses_1", part: { type: "step-finish" } })
+      const result = parser(line)
+      expect(result.finalText).toBeUndefined()
+      expect(result.progressText).toBeUndefined()
     })
   })
 

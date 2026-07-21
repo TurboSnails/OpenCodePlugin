@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "fs"
 import { join } from "path"
 
-export type ParserName = "claude" | "codex" | "raw"
+export type ParserName = "claude" | "codex" | "opencode" | "raw"
 
 export interface DelegateConfig {
   binary: string
@@ -131,8 +131,8 @@ function validateConfig(config: unknown): string[] {
       errors.push(`delegate "${name}": missing or invalid "binary" field`)
     }
 
-    if (typeof d.parser !== "string" || !["claude", "codex", "raw"].includes(d.parser)) {
-      errors.push(`delegate "${name}": "parser" must be "claude", "codex", or "raw"`)
+    if (typeof d.parser !== "string" || !["claude", "codex", "opencode", "raw"].includes(d.parser)) {
+      errors.push(`delegate "${name}": "parser" must be "claude", "codex", "opencode", or "raw"`)
     }
 
     if (!Array.isArray(d.startArgs) || !d.startArgs.every((a) => typeof a === "string")) {
