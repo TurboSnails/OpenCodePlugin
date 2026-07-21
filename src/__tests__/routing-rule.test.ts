@@ -22,4 +22,15 @@ describe("buildRoutingRule", () => {
     expect(rule).toContain("custom-cli")
     expect(rule).toContain("custom-cli_reply")
   })
+
+  it("uses a custom reply tool name when provided", () => {
+    const rule = buildRoutingRule("codex", "mcp__cli-dispatch__codex_reply")
+    expect(rule).toContain("mcp__cli-dispatch__codex_reply")
+    expect(rule).not.toContain("to the codex_reply tool.")
+  })
+
+  it("defaults the reply tool name to `${delegate}_reply` when not provided", () => {
+    const rule = buildRoutingRule("codex")
+    expect(rule).toContain("codex_reply")
+  })
 })
