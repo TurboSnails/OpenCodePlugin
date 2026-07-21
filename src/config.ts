@@ -91,31 +91,9 @@ const DEFAULT_CONFIG: CliDispatchConfig = {
   },
 }
 
-function validateConfig(config: unknown): string[] {
+export function validateDelegates(delegates: Record<string, unknown>): string[] {
   const errors: string[] = []
 
-  if (typeof config !== "object" || config === null) {
-    return ["config must be an object"]
-  }
-
-  const obj = config as Record<string, unknown>
-  if (typeof obj.delegates !== "object" || obj.delegates === null) {
-    return ['"delegates" must be an object']
-  }
-
-  if (obj.verifiedModels !== undefined) {
-    if (!Array.isArray(obj.verifiedModels)) {
-      errors.push('"verifiedModels" must be an array of "provider/model" strings')
-    } else {
-      for (const entry of obj.verifiedModels) {
-        if (!isValidVerifiedModelEntry(entry)) {
-          errors.push(`"verifiedModels" entry ${JSON.stringify(entry)} must be a "provider/model" string, each segment optionally ending in a trailing "*" wildcard`)
-        }
-      }
-    }
-  }
-
-  const delegates = obj.delegates as Record<string, unknown>
   for (const [name, delegate] of Object.entries(delegates)) {
     if (!/^[\w-]+$/.test(name)) {
       errors.push(`delegate "${name}": name must match /^[\\w-]+$/ (letters, digits, underscore, hyphen) or it would produce invalid tool names`)
@@ -153,6 +131,36 @@ function validateConfig(config: unknown): string[] {
       errors.push(`delegate "${name}": "timeoutMs" must be a positive number`)
     }
   }
+
+  return errors
+}
+
+function validateConfig(config: unknown): string[] {
+  const errors: string[] = []
+
+  if (typeof config !== "object" || config === null) {
+    return ["config must be an object"]
+  }
+
+  const obj = config as Record<string, unknown>
+  if (typeof obj.delegates !== "object" || obj.delegates === null) {
+    return ['"delegates" must be an object']
+  }
+
+  if (obj.verifiedModels !== undefined) {
+    if (!Array.isArray(obj.verifiedModels)) {
+      errors.push('"verifiedModels" must be an array of "provider/model" strings')
+    } else {
+      for (const entry of obj.verifiedModels) {
+        if (!isValidVerifiedModelEntry(entry)) {
+          errors.push(`"verifiedModels" entry ${JSON.stringify(entry)} must be a "provider/model" string, each segment optionally ending in a trailing "*" wildcard`)
+        }
+      }
+    }
+  }
+
+  const delegates = obj.delegates as Record<string, unknown>
+  errors.push(...validateDelegates(delegates))
 
   return errors
 }
