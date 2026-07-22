@@ -16,19 +16,25 @@ npm pack              # produces opencode-cli-dispatch-<version>.tgz in the repo
 
 ## Installation
 
-This package is meant to be consumed by another OpenCode project, either as an npm dependency (from the tarball built above, or a published registry version) or as a local plugin file copied/symlinked in.
+This package is meant to be consumed by another OpenCode project. The primary install method is npm:
 
-### Option A — install the tarball into another project
+- once published: `npm install opencode-cli-dispatch` or `bun add opencode-cli-dispatch`
+- pre-publish / development: install from the local tarball built with `npm pack` (see [Building a package](#building-a-package)), or from the git URL
+
+It can also be used as a local plugin file copied/symlinked in (see Option B below).
+
+### Option A — install from npm (or a local tarball before publish)
 
 From the *other* project's directory:
 
 ```bash
+# once published
+bun add opencode-cli-dispatch
+# or, before publish, install the local tarball built with npm pack
 npm install /path/to/mcpOC/opencode-cli-dispatch-1.0.0.tgz
 # or, to depend on it by path instead of copying the tarball into node_modules once:
 npm install "file:/path/to/mcpOC/opencode-cli-dispatch-1.0.0.tgz"
 ```
-
-(If it's later published to npm, this becomes `npm install opencode-cli-dispatch` / `bun add opencode-cli-dispatch`.)
 
 Then register it in that project's `opencode.json` / `opencode.jsonc`:
 
@@ -56,7 +62,7 @@ export default createCliDispatchPlugin(undefined, { commandsDir: ".opencode/comm
 
 ### Option B — local plugin file (no package install)
 
-OpenCode auto-loads any `.ts`/`.js` file under `.opencode/plugin/` in your project root. Drop a thin wrapper there (this is exactly how this repo dogfoods itself, see [.opencode/plugin/cli-dispatch.ts](../.opencode/plugin/cli-dispatch.ts)), importing straight from this repo's source or `dist/` instead of installing a package at all:
+Instead of installing via npm, you can also use a local plugin file. OpenCode auto-loads any `.ts`/`.js` file under `.opencode/plugin/` in your project root. Drop a thin wrapper there (this is exactly how this repo dogfoods itself, see [.opencode/plugin/cli-dispatch.ts](../.opencode/plugin/cli-dispatch.ts)), importing straight from this repo's source or `dist/` instead of installing a package at all:
 
 ```ts
 // .opencode/plugin/cli-dispatch.ts
@@ -72,7 +78,7 @@ export default createCliDispatchPlugin()
 
 ### Option C — install once, globally (all projects)
 
-Both of the options above are per-project. OpenCode also has a global config directory, `~/.config/opencode/`, that applies to every project you open — this is where to install if you don't want to repeat the setup per repo. Confirmed against [OpenCode's plugin](https://opencode.ai/docs/plugins/) and [commands](https://opencode.ai/docs/commands/) docs, and cross-checked against `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/plugins/` on a real machine — both are actively used there today (e.g. the `superpowers` plugin is loaded the same way).
+Both Option A and Option B above are per-project. If you prefer to install the package once and have it available everywhere instead of using npm in each project, OpenCode also has a global config directory, `~/.config/opencode/`, that applies to every project you open — this is where to install if you don't want to repeat the setup per repo. Confirmed against [OpenCode's plugin](https://opencode.ai/docs/plugins/) and [commands](https://opencode.ai/docs/commands/) docs, and cross-checked against `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/plugins/` on a real machine — both are actively used there today (e.g. the `superpowers` plugin is loaded the same way).
 
 **1. Register the plugin globally**, in `~/.config/opencode/opencode.json` or `opencode.jsonc`:
 

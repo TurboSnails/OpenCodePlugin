@@ -7,8 +7,9 @@ An [OpenCode](https://opencode.ai) plugin that delegates a conversation to an ex
 ## Quickstart
 
 ```bash
-# 1. install the plugin (in any opencode project, or globally)
+# 1. install the plugin in your opencode project (npm install once published, or use the local tarball for now)
 bun add opencode-cli-dispatch
+#    bun add -g opencode-cli-dispatch   # if you want it available everywhere
 ```
 
 ```jsonc
