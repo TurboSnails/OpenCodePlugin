@@ -2,12 +2,12 @@
 
 [中文文档](README_CN.md)
 
-An [OpenCode](https://opencode.ai) plugin that delegates a conversation to an external CLI coding agent (Claude Code, Codex, or any other CLI agent you configure) and streams its response back into the OpenCode chat. Delegation is **sticky**: once started, every follow-up message in the session keeps going to the same delegate until you explicitly exit.
+An [OpenCode](https://opencode.ai) plugin that delegates a conversation to an external CLI coding agent (Claude Code, Codex, or any other CLI agent you configure) and streams its response back into the OpenCode chat. Delegation is **sticky on a best-effort basis**: once started, follow-up messages in the session keep being routed to the same delegate until you explicitly exit — but this relies on the model calling the delegate's reply tool, which no hook can force (see [Known limitations](#known-limitations)). An explicit `/<delegate> <message>` command is the reliable way to reach the delegate.
 
 ## Features
 
 - **Multi-delegate**: any number of CLI agents can be configured side by side (ships with `claude` and `codex` presets).
-- **Sticky routing**: after `/cc` or `/codex`, all subsequent messages — including plain text and other slash commands — are forwarded to the active delegate until `/opencode` is run.
+- **Best-effort sticky routing**: after `/cc` or `/codex`, subsequent messages — including plain text and other slash commands — are forwarded to the active delegate until `/opencode` is run. This depends on model compliance; a model answering directly is outside the plugin's control.
 - **Session resume**: each delegate keeps its own external session id, so follow-ups resume the underlying CLI session (`--resume` / `exec resume`) instead of starting fresh.
 - **Auto-generated commands**: `/{name}`, `/{name}_reply`-driving slash commands are generated per configured delegate, plus a shared `/opencode` exit command.
 - **Change summaries**: each delegate turn diffs the git worktree before/after the run and appends a short summary (`git diff --stat` + new untracked files) to the response.
@@ -141,13 +141,13 @@ Delegate behavior is defined in `cli-dispatch.config.json`, resolved (first matc
       "parser": "claude",
       "startArgs": [
         "-p", "--output-format", "stream-json", "--verbose",
-        "--permission-mode", "bypassPermissions",
+        "--permission-mode", "acceptEdits",
         "--session-id", "{sessionId}",
         "--", "{prompt}"
       ],
       "replyArgs": [
         "-p", "--output-format", "stream-json", "--verbose",
-        "--permission-mode", "bypassPermissions",
+        "--permission-mode", "acceptEdits",
         "--resume", "{externalId}",
         "--", "{prompt}"
       ]
@@ -193,6 +193,8 @@ Each entry is a `provider/model` string; either segment may end in a trailing `*
 
 This does not, and cannot, guarantee a model calls `{name}_reply` on every sticky follow-up — no hook fires when a model answers with plain text and calls no tool at all. It narrows the failure to "known-bad models are blocked at the door," not "every model is forced to comply."
 
+The gate also covers direct `{name}_start`/`{name}_reply` tool calls (OpenCode `tool.execute.before`, Claude Code `PreToolUse`), closing the bypass where a model calls the tool without going through a slash command. When the current model is unknown (e.g. the first message of a session), both paths fail open: the gate is a guardrail against known-bad models, not a sandbox.
+
 A separate, always-on check rejects a `{name}_start`/`{name}_reply` call whose `prompt` argument contains the whole delegate command template (detected by an internal marker) instead of the user's actual message — this is independent of `verifiedModels` and applies regardless of configuration.
 
 ### Config errors and the `cli_dispatch_status` tool
@@ -213,10 +215,12 @@ Each delegate runs as a separate subprocess with its own permission/sandbox syst
 
 | Mode | Effect |
 |---|---|
-| `bypassPermissions` | All tool actions allowed without asking (default in this package) |
+| `bypassPermissions` | All tool actions allowed without asking (**opt-in escalation** — not the default) |
 | `acceptEdits` | File edits auto-accepted; other actions still gated |
 | `dontAsk` | Actions requiring permission are **denied without asking** — effectively read-only |
 | `plan` | Read-only planning mode |
+
+The built-in `claude` delegate defaults to `acceptEdits`. To restore the previous behavior, set `"--permission-mode", "bypassPermissions"` explicitly in `cli-dispatch.config.json` — this is an opt-in escalation. If no `cli-dispatch.config.json` exists at all, the plugin uses the safe built-in defaults and logs a loud warning telling you where to place the config file.
 
 #### codex
 
@@ -233,7 +237,7 @@ A delegate session keeps the flags it was started with for its entire lifetime (
 
 ## Usage
 
-The plugin generates one slash command per configured delegate, named `/<delegate-name>` (e.g. `/claude`, `/codex`). In this repo, `/cc` is an extra hand-maintained alias for `/claude` that lives in [.opencode/command/cc.md](.opencode/command/cc.md) — it is not generated by the plugin.
+The plugin generates one slash command per configured delegate, named `/<delegate-name>` (e.g. `/claude`, `/codex`). In this repo, `/cc` is an extra hand-maintained alias for `/claude` that lives in [.opencode/command/cc.md](.opencode/command/cc.md) — it is not generated by the plugin. **Note for custom-command authors:** a hand-maintained command is only covered by the verified-models gate when it declares which delegate it drives via a `delegate: <name>` line in its markdown frontmatter (as the plugin-generated commands do); without that declaration the gate cannot associate the command with a delegate.
 
 - `/<delegate-name> <message>` — start (or continue) a delegation to that delegate (e.g. `/claude <message>`, `/codex <message>`, or the `/cc` alias).
 - `/opencode` — exit the active delegation for this session; OpenCode answers directly again.

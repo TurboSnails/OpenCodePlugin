@@ -2,12 +2,12 @@
 
 [English](README.md)
 
-一个 [OpenCode](https://opencode.ai) 插件，用于把当前对话委托（delegate）给外部 CLI coding agent（Claude Code、Codex，或任何你自行配置的 CLI agent），并把它的响应实时流回 OpenCode 聊天界面。委托是**粘性（sticky）**的：一旦开始委托，该会话后续的所有消息都会持续发给同一个 delegate，直到你显式退出。
+一个 [OpenCode](https://opencode.ai) 插件，用于把当前对话委托（delegate）给外部 CLI coding agent（Claude Code、Codex，或任何你自行配置的 CLI agent），并把它的响应实时流回 OpenCode 聊天界面。委托是**尽力而为的粘性（best-effort sticky）**路由：一旦开始委托，该会话后续的消息会持续路由给同一个 delegate，直到你显式退出——但这依赖模型主动调用 delegate 的 reply 工具，没有任何 hook 能强制这一点（见[已知限制](#已知限制)）。显式的 `/<delegate> <message>` 命令始终是触达 delegate 的可靠方式。
 
 ## 特性
 
 - **多 delegate 并存**：可以同时配置任意数量的 CLI agent（内置 `claude` 和 `codex` 两套预设）。
-- **粘性路由**：执行 `/cc` 或 `/codex` 后，该会话之后的所有输入——包括纯文本消息和其他 slash 命令——都会被转发给当前激活的 delegate，直到执行 `/opencode` 为止。
+- **尽力而为的粘性路由**：执行 `/cc` 或 `/codex` 后，该会话之后的输入——包括纯文本消息和其他 slash 命令——都会被转发给当前激活的 delegate，直到执行 `/opencode` 为止。这依赖模型配合；如果模型直接作答而不调用工具，则超出插件的控制范围。
 - **会话续接**：每个 delegate 都维护自己的外部会话 id，follow-up 消息会续接底层 CLI 的会话（`--resume` / `exec resume`），而不是每次重新开一个新会话。
 - **自动生成命令**：为每个配置的 delegate 自动生成对应的 `/{name}` 委托命令，以及一个共用的 `/opencode` 退出命令。
 - **变更摘要**：每一轮 delegate 调用前后都会对 git 工作区做一次快照对比，并在响应末尾附上简要摘要（`git diff --stat` + 新增的未跟踪文件）。
@@ -141,13 +141,13 @@ delegate 的行为由 `cli-dispatch.config.json` 定义，按以下顺序解析�
       "parser": "claude",
       "startArgs": [
         "-p", "--output-format", "stream-json", "--verbose",
-        "--permission-mode", "bypassPermissions",
+        "--permission-mode", "acceptEdits",
         "--session-id", "{sessionId}",
         "--", "{prompt}"
       ],
       "replyArgs": [
         "-p", "--output-format", "stream-json", "--verbose",
-        "--permission-mode", "bypassPermissions",
+        "--permission-mode", "acceptEdits",
         "--resume", "{externalId}",
         "--", "{prompt}"
       ]
@@ -193,6 +193,8 @@ delegate 的行为由 `cli-dispatch.config.json` 定义，按以下顺序解析�
 
 这套机制无法、也不能保证模型在每一次粘性 follow-up 时都调用 `{name}_reply`——如果模型选择直接输出文字、完全不调用任何工具,没有任何 hook 会被触发。它能做到的是"已知有问题的模型被挡在门外",而不是"强制所有模型都乖乖配合"。
 
+该门禁同样覆盖对 `{name}_start`/`{name}_reply` 工具的直接调用（OpenCode 的 `tool.execute.before`，Claude Code 的 `PreToolUse`），堵住了模型绕过 slash 命令直接调用工具的旁路。当当前模型未知时（例如会话的第一条消息），两条路径都失败放行（fail open）：这个门禁是针对已知有问题模型的防护栏，而不是沙箱。
+
 另有一个始终生效、与 `verifiedModels` 是否配置无关的检查:如果 `{name}_start`/`{name}_reply` 的 `prompt` 参数里包含了整段委托命令模板(通过内部标记识别),而不是用户的真实消息,调用会被拒绝。
 
 ### 配置错误与 `cli_dispatch_status` 工具
@@ -213,10 +215,12 @@ delegate 的行为由 `cli-dispatch.config.json` 定义，按以下顺序解析�
 
 | 模式 | 效果 |
 |---|---|
-| `bypassPermissions` | 所有工具操作无需询问，直接允许（本包默认值） |
+| `bypassPermissions` | 所有工具操作无需询问，直接允许（**可选升级**——不再是默认值） |
 | `acceptEdits` | 文件编辑自动接受，其他操作仍需确认 |
 | `dontAsk` | 需要权限的操作会**被直接拒绝而不询问**——相当于只读 |
 | `plan` | 只读规划模式 |
+
+内置 `claude` delegate 默认使用 `acceptEdits`。如需恢复旧行为，请在 `cli-dispatch.config.json` 中显式设置 `"--permission-mode", "bypassPermissions"`——这是一项可选的权限升级。如果完全不存在 `cli-dispatch.config.json`，插件会使用安全的内置默认值，并输出醒目的警告，提示配置文件应放置的位置。
 
 #### codex
 
@@ -233,7 +237,7 @@ delegate 的行为由 `cli-dispatch.config.json` 定义，按以下顺序解析�
 
 ## 使用方法
 
-插件会按配置为每个 delegate 生成一个 slash 命令，命名为 `/<delegate-name>`（如 `/claude`、`/codex`）。本仓库中的 `/cc` 是 [.opencode/command/cc.md](.opencode/command/cc.md) 里手工维护的 `/claude` 别名，并非插件生成。
+插件会按配置为每个 delegate 生成一个 slash 命令，命名为 `/<delegate-name>`（如 `/claude`、`/codex`）。本仓库中的 `/cc` 是 [.opencode/command/cc.md](.opencode/command/cc.md) 里手工维护的 `/claude` 别名，并非插件生成。**给自定义命令作者的提示**：手工维护的命令只有在 markdown frontmatter 中通过 `delegate: <name>` 声明了它所驱动的 delegate 时，才会被 verifiedModels 门禁覆盖（插件自动生成的命令都带有该声明）；缺少该声明时，门禁无法把命令与 delegate 关联起来。
 
 - `/<delegate-name> <消息>` —— 启动（或继续）一个到该 delegate 的委托（如 `/claude <消息>`、`/codex <消息>`，或 `/cc` 别名）。
 - `/opencode` —— 退出该会话当前激活的委托，之后由 OpenCode 自己直接作答。

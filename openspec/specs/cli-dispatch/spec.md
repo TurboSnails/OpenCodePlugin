@@ -14,7 +14,7 @@ The system SHALL statically generate one opencode slash command per configured d
 - **THEN** the system starts a new headless session with the given task using the delegate's configured binary and args, and returns the delegate's response to the user
 
 ### Requirement: Sticky multi-turn delegation
-Once a delegate has been addressed via `/<delegate-name>`, the system SHALL route subsequent user messages in that opencode session to the same delegate's session (continuing its thread/session id), without requiring the user to repeat the command, until a different delegate command is issued or delegation is exited. The routing rule SHALL be injected at system-prompt level on every model call while a delegation is active (via the plugin's `experimental.chat.system.transform` hook keyed by opencode session id), so that intervening non-delegate commands do not terminate the delegation. While a delegation is active, command invocations (e.g. `/opsx-explore`) and agent mentions (e.g. `@explore`) SHALL be forwarded to the delegate as prompt content rather than handled by opencode's own model; opencode-internal agent-mention expansion text SHALL be rewritten to a plain-language statement of intent before forwarding.
+Once a delegate has been addressed via `/<delegate-name>`, the system SHOULD route subsequent user messages in that opencode session to the same delegate's session (continuing its thread/session id) on a best-effort basis, without requiring the user to repeat the command, until a different delegate command is issued or delegation is exited. Sticky routing depends on the model following the injected routing rule; a model that answers a follow-up with plain text instead of calling the delegate's reply tool is outside the plugin's control — no hook fires for that case — and an explicit `/<delegate-name> <message>` command remains the reliable way to send a message to a delegate. The routing rule SHALL be injected at system-prompt level on every model call while a delegation is active (via the plugin's `experimental.chat.system.transform` hook keyed by opencode session id), so that intervening non-delegate commands do not terminate the delegation. While a delegation is active, command invocations (e.g. `/opsx-explore`) and agent mentions (e.g. `@explore`) SHALL be forwarded to the delegate as prompt content rather than handled by opencode's own model; opencode-internal agent-mention expansion text SHALL be rewritten to a plain-language statement of intent before forwarding.
 
 #### Scenario: Follow-up message continues the same delegate
 - **WHEN** the user has an active delegation and sends a follow-up message without a `/<delegate-name>` prefix
@@ -35,6 +35,10 @@ Once a delegate has been addressed via `/<delegate-name>`, the system SHALL rout
 #### Scenario: Agent mention is translated and forwarded to the delegate
 - **WHEN** the user has an active claude delegation and sends `@explore <topic>`
 - **THEN** the opencode-internal mention expansion text is rewritten to a plain-language statement of intent, the rewritten content is passed to the claude session, and claude's response is returned to the user
+
+#### Scenario: Model answering directly is outside plugin control
+- **WHEN** a delegation is active and the model answers a follow-up with plain text instead of calling the delegate's reply tool
+- **THEN** this is a known best-effort limitation: no hook fires for a plain-text answer, and the user can recover by sending an explicit `/<delegate-name> <message>` command
 
 ### Requirement: Live progress while a delegate is running
 While a delegated CLI subprocess is running, the system SHALL surface live progress information in opencode's UI by parsing the CLI's streaming JSON output, rather than only showing a result once the subprocess exits.
@@ -61,6 +65,20 @@ Every delegate CLI run SHALL be bounded by a timeout: 10 minutes by default, ove
 #### Scenario: User cancellation kills the delegate subprocess
 - **WHEN** the user aborts an in-flight `*_start` or `*_reply` tool call
 - **THEN** the system terminates the delegate subprocess (SIGTERM, escalating to SIGKILL after the grace period) and the tool result indicates the run was cancelled by the user, rather than a timeout or a crash
+
+Termination SHALL target the whole delegate process tree: the delegate runs in its own process group on POSIX (killed via a group signal) and uses tree termination on Windows. The run SHALL treat process exit — not stdout/stderr EOF — as the end of the run, draining pipes for at most a bounded grace period after exit, so grandchildren holding pipes open cannot hang a timed-out run. A non-zero exit code SHALL be reported as failure even when the delegate produced final text; the error SHALL include the exit code and a capped stderr excerpt. stdout, stderr, and individual line buffers SHALL be capped, and exceeding a cap SHALL fail the run with a clear "produced too much output" error rather than growing memory without bound.
+
+#### Scenario: Non-zero exit is failure even with final text
+- **WHEN** a delegate CLI prints a final response and then exits with a non-zero code
+- **THEN** the run is reported as a failure including the exit code and a capped stderr excerpt, not as a successful answer
+
+#### Scenario: Output cap exceeded fails the run
+- **WHEN** a delegate CLI emits more output than the caps allow
+- **THEN** the run fails with a clear "produced too much output" error
+
+#### Scenario: Grandchild processes are terminated on timeout
+- **WHEN** a delegate CLI forks a grandchild that holds stdout open and the run times out
+- **THEN** the whole process tree is terminated and the run reports a timeout without hanging
 
 ### Requirement: Session state scoped per opencode session
 The system SHALL track, per opencode session, which delegate (if any) is currently active and that delegate's own thread/session identifier, so that concurrent opencode sessions do not share or overwrite each other's delegated conversations. Capturing this identifier on `*_start` SHALL work uniformly for every configured delegate, regardless of whether that delegate's CLI assigns its own session/thread id and reports it back on the output stream, or whether opencode generates the id itself and passes it to the CLI at spawn time.
@@ -154,6 +172,12 @@ The system SHALL track, per opencode session, the model (`providerID`/`modelID`)
 #### Scenario: No allow-list configured imposes no restriction
 - **WHEN** `verifiedModels` is not configured (or configured empty) and the user issues `/<delegate-name> <task>`
 - **THEN** the system starts the delegation regardless of the session's tracked model
+
+The gate SHALL also cover direct `{name}_start`/`{name}_reply` tool calls (via the plugin's `tool.execute.before` hook on OpenCode and the `PreToolUse` hook in the Claude Code adapter), so calling the tool directly cannot bypass the allow-list. When the current model is unknown — e.g. the first message of a session, or a transcript that names no model — all gate paths fail open: the gate is a guardrail against known-bad models, not a sandbox.
+
+#### Scenario: Direct tool call blocked for an unverified model
+- **WHEN** `verifiedModels` is configured, the current model is known and not on the allow-list, and the model calls `{name}_start` directly without a slash command
+- **THEN** the tool call is rejected before the delegate spawns, with a message naming the model and the allow-list
 
 ### Requirement: Reject prompt arguments that are the whole command template
 The system SHALL detect when a `prompt` argument passed to `{name}_start` or `{name}_reply` is the entire expanded delegate command template rather than the user's actual message (identified by the presence of the generated-command marker used internally to tag generated command files), and SHALL reject the call with an actionable error instead of forwarding it to the delegate CLI.

@@ -70,7 +70,7 @@ The system SHALL dynamically create `{name}_start` and `{name}_reply` tools for 
 - **THEN** the system registers tools: `claude_start`, `claude_reply`, `codex_start`, `codex_reply`, `my-agent_start`, `my-agent_reply`
 
 ### Requirement: Built-in parser selection
-The system SHALL use the specified parser for each delegate: "claude" for Claude Code stream-json, "codex" for Codex JSONL events, or "raw" for stdout capture.
+The system SHALL use the specified parser for each delegate: "claude" for Claude Code stream-json, "codex" for Codex JSONL events, "opencode" for `opencode run --format json` events, or "raw" for stdout capture.
 
 #### Scenario: Claude parser
 - **WHEN** delegate uses parser "claude"
@@ -79,6 +79,10 @@ The system SHALL use the specified parser for each delegate: "claude" for Claude
 #### Scenario: Codex parser
 - **WHEN** delegate uses parser "codex"
 - **THEN** the system parses JSON lines with `type: "thread.started"` for session ID and `type: "item.completed"` with `item.type: "agent_message"` for final text
+
+#### Scenario: Opencode parser
+- **WHEN** delegate uses parser "opencode"
+- **THEN** the system parses JSON lines with a `sessionID` field (present on every line) for the external session id, and accumulates `type: "text"` events' `part.text` (in order, newline-joined) as the final text
 
 #### Scenario: Raw parser
 - **WHEN** delegate uses parser "raw"
