@@ -1,5 +1,28 @@
 {
     "permissions": {
       "defaultMode": "acceptEdits"
+    },
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "mcp__cli-dispatch__.*",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "bun run $CLAUDE_PROJECT_DIR/src/claude-code-adapter/pretooluse-cli.ts"
+            }
+          ]
+        }
+      ],
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "bun run $CLAUDE_PROJECT_DIR/src/claude-code-adapter/userpromptsubmit-cli.ts"
+            }
+          ]
+        }
+      ]
     }
 }

@@ -167,7 +167,7 @@ delegate 的行为由 `cli-dispatch.config.json` 定义，按以下顺序解析�
 | 字段 | 含义 |
 |---|---|
 | `binary` | 要启动的可执行文件（需在 `PATH` 中，或提供绝对路径）。 |
-| `parser` | `"claude"`、`"codex"` 或 `"raw"` —— 决定如何把 stdout 事件解析成进度更新和最终响应。其中 `raw` 的最终响应是把所有 stdout 行按顺序用换行拼接（而不是只取最后一行）。 |
+| `parser` | `"claude"`、`"codex"`、`"opencode"` 或 `"raw"` —— 决定如何把 stdout 事件解析成进度更新和最终响应。`"opencode"` 解析 `opencode run --format json` 的输出（session id 取自每行都有的 `sessionID` 字段，最终响应由 `text` 事件按序累积）。其中 `raw` 的最终响应是把所有 stdout 行按顺序用换行拼接（而不是只取最后一行）。 |
 | `startArgs` | 首轮调用的参数模板，支持占位符 `{prompt}`、`{sessionId}`。 |
 | `replyArgs` | 后续调用的参数模板，支持占位符 `{prompt}`、`{externalId}`（delegate 在启动时返回的会话 id）。 |
 | `timeoutMs` | 可选。单次调用的超时时间（毫秒），覆盖默认的 10 分钟超时（见[超时与取消](#超时与取消)）。必须是正数，否则配置校验会失败。 |
@@ -254,6 +254,18 @@ delegate 子进程在会话的项目目录（OpenCode 在工具上下文中提�
 
 同一会话内如果并发发起多个 `{name}_start`，以最新发起的为准：先发起但后完成的调用不会覆盖更新的委托。
 
+## Claude Code 适配器
+
+Claude Code 也可以作为宿主，把会话委派给 `codex` 和 `opencode`，契约与 OpenCode 插件相同（粘性路由 / verifiedModels 门槛 / prompt 模板消毒），但实现在 Claude Code 的扩展机制上：MCP server 注册 delegate 工具，`PreToolUse` / `UserPromptSubmit` hooks（在 `.claude/settings.json` 里配置的短命 shell 进程）负责模板消毒、粘性路由规则注入、模型门槛和 `/cc` 退出命令。本仓库自用该适配器，以下文件就是它的实际安装形态：
+
+1. `.mcp.json` 注册 `cli-dispatch` MCP server（`bun run src/claude-code-adapter/mcp-server.ts`）。Claude Code 第一次见到项目级 `.mcp.json` 时会要求**一次性交互批准**——必须批准，否则 delegate 工具不会出现。hooks 在设计上不依赖 MCP server 在线：即使还没批准，`/cc` 退出和 verifiedModels 拦截也照常工作。
+2. `.claude/settings.json` 注册两个 hooks。
+3. `.claude/commands/` 提供 `/codex`、`/opencode`（委派出去）和 `/cc`（回家——与 OpenCode 的 `/opencode` 同为"说出宿主自己的名字"约定）。
+
+配置放在项目根目录的 `claude-code-adapter.config.json`（文件缺失时回退到内置的 codex+opencode 默认配置）。`delegates` 条目与上文 OpenCode 的[配置](#配置)完全同构。适配器的 `verifiedModels` 形状与 OpenCode 版的 `provider/model` 对不同：Claude Code 没有 provider 维度，所以条目是裸模型串 pattern（`"claude-sonnet-5"`、`"claude-*"`、`"*"`）——支持结尾 `*` 通配、大小写敏感，模型未知时同样放行（fail open），见[已验证模型 verifiedModels](#已验证模型-verifiedmodels)。
+
+委派状态（当前 delegate、外部 session id）以每个 Claude Code session 一个小 JSON 文件的形式持久化在系统临时目录（`cli-dispatch-claude-code/`），因为每次 hook 调用都是独立进程；当前模型不做持久化——每次检查时从会话 transcript 里现读。
+
 ## 开发
 
 ```bash
@@ -275,8 +287,9 @@ bun test         # bun test，测试文件见 src/__tests__
 | [src/commands.ts](src/commands.ts) | 生成 `/{name}` 和 `/opencode` 的 markdown 命令文件。 |
 | [src/routing-rule.ts](src/routing-rule.ts) | 构建注入到系统提示词中的粘性路由指令。 |
 | [src/run-delegate.ts](src/run-delegate.ts) | 启动 delegate 二进制并把 stdout 流式传给解析器。 |
-| [src/parse-events.ts](src/parse-events.ts) | 各 CLI 的 stdout 事件解析器（`claude`、`codex`、`raw`）。 |
+| [src/parse-events.ts](src/parse-events.ts) | 各 CLI 的 stdout 事件解析器（`claude`、`codex`、`opencode`、`raw`）。 |
 | [src/session-store.ts](src/session-store.ts) | 按 OpenCode 会话 id 存储的内存态 delegate/agent 状态。 |
+| [src/claude-code-adapter/](src/claude-code-adapter) | Claude Code 宿主适配器：MCP server、`PreToolUse`/`UserPromptSubmit` hooks、文件持久化的会话状态。 |
 
 ## 许可证
 

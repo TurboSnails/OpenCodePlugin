@@ -167,7 +167,7 @@ Each delegate entry:
 | Field | Meaning |
 |---|---|
 | `binary` | Executable to spawn (must be on `PATH`, or an absolute path). |
-| `parser` | `"claude"`, `"codex"`, or `"raw"` — selects how stdout events are parsed into progress updates and a final response. With `raw`, the final response is all stdout lines joined by newlines, in order (not just the last line). |
+| `parser` | `"claude"`, `"codex"`, `"opencode"`, or `"raw"` — selects how stdout events are parsed into progress updates and a final response. `"opencode"` parses `opencode run --format json` output (session id from the `sessionID` field present on every line; final text accumulated from `text` events). With `raw`, the final response is all stdout lines joined by newlines, in order (not just the last line). |
 | `startArgs` | Argv template for the first turn. Placeholders: `{prompt}`, `{sessionId}`. |
 | `replyArgs` | Argv template for follow-up turns. Placeholders: `{prompt}`, `{externalId}` (the session id the delegate itself returned on start). |
 | `timeoutMs` | Optional. Per-run timeout in milliseconds, overriding the default 10-minute timeout (see [Timeout and cancellation](#timeout-and-cancellation)). Must be a positive number — anything else fails config validation. |
@@ -254,6 +254,18 @@ This is now mitigated, not just documented: configure [`verifiedModels`](#verifi
 
 If multiple `{name}_start` calls run concurrently within the same session, the latest initiated start wins: an earlier start that finishes later will not overwrite the newer delegation.
 
+## Claude Code adapter
+
+Claude Code can also act as a host, delegating to `codex` and `opencode` with the same sticky-routing/verified-models/prompt-sanitization contract — implemented on Claude Code's primitives instead of OpenCode's. An MCP server registers the delegate tools, and `PreToolUse`/`UserPromptSubmit` hooks (short-lived shell processes, configured in `.claude/settings.json`) provide the template sanitization, the sticky routing-rule injection, the verified-models gate, and the `/cc` exit command. This repo dogfoods the adapter; the files below are its working setup:
+
+1. `.mcp.json` registers the `cli-dispatch` MCP server (`bun run src/claude-code-adapter/mcp-server.ts`). The first time Claude Code sees a project-scoped `.mcp.json`, it asks for a **one-time interactive approval** — approve it, or the delegate tools never appear. The hooks deliberately don't depend on the MCP server being up: the `/cc` exit and the verified-models block work even before approval.
+2. `.claude/settings.json` registers the two hooks.
+3. `.claude/commands/` provides `/codex` and `/opencode` (delegate out) and `/cc` (come home — the same "say the host's own name" convention as OpenCode's `/opencode`).
+
+Configuration lives in `claude-code-adapter.config.json` at the project root (falling back to a built-in codex+opencode default when absent). The `delegates` entries use the exact same shape as the OpenCode [Configuration](#configuration) above. The adapter's `verifiedModels` differs in shape from OpenCode's `provider/model` pairs: Claude Code exposes no provider dimension, so entries are bare model-string patterns (`"claude-sonnet-5"`, `"claude-*"`, `"*"`) — trailing `*` wildcard, case-sensitive, with the same fail-open-when-the-model-is-unknown policy as [Verified models](#verified-models).
+
+Delegation state (active delegate, external session id) is persisted as one small JSON file per Claude Code session under the OS temp dir (`cli-dispatch-claude-code/`), because each hook invocation is a separate process; the current model is not persisted — it is read fresh from the session transcript on every check.
+
 ## Development
 
 ```bash
@@ -275,8 +287,9 @@ Source layout:
 | [src/commands.ts](src/commands.ts) | Generates the `/{name}` and `/opencode` markdown command files. |
 | [src/routing-rule.ts](src/routing-rule.ts) | Builds the sticky-routing instruction injected into the system prompt. |
 | [src/run-delegate.ts](src/run-delegate.ts) | Spawns the delegate binary and streams stdout to a parser. |
-| [src/parse-events.ts](src/parse-events.ts) | Per-CLI stdout event parsers (`claude`, `codex`, `raw`). |
+| [src/parse-events.ts](src/parse-events.ts) | Per-CLI stdout event parsers (`claude`, `codex`, `opencode`, `raw`). |
 | [src/session-store.ts](src/session-store.ts) | In-memory per-OpenCode-session delegate/agent state. |
+| [src/claude-code-adapter/](src/claude-code-adapter) | Claude Code host adapter: MCP server, `PreToolUse`/`UserPromptSubmit` hooks, file-backed session store. |
 
 ## License
 

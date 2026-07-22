@@ -47,12 +47,30 @@ function parseCodexLine(line) {
     }
     return {};
 }
+function parseOpencodeLine(line) {
+    let obj;
+    try {
+        obj = JSON.parse(line);
+    }
+    catch {
+        return { progressText: line };
+    }
+    if (!isEventObject(obj))
+        return {};
+    // sessionID is present on every opencode event line.
+    const externalId = typeof obj.sessionID === "string" ? obj.sessionID : undefined;
+    if (obj.type === "text" && typeof obj.part?.text === "string") {
+        return { externalId, progressText: obj.part.text, finalText: obj.part.text, appendFinalText: true };
+    }
+    return { externalId };
+}
 function parseRawLine(line) {
     return { progressText: line, finalText: line, appendFinalText: true };
 }
 const PARSERS = {
     claude: parseClaudeLine,
     codex: parseCodexLine,
+    opencode: parseOpencodeLine,
     raw: parseRawLine,
 };
 export function getParser(name) {

@@ -86,6 +86,52 @@ describe("getParser", () => {
     })
   })
 
+  describe("opencode parser", () => {
+    const parser = getParser("opencode")
+
+    it("extracts the session id present on every line", () => {
+      const line = JSON.stringify({ type: "step_start", sessionID: "ses_123" })
+      expect(parser(line).externalId).toBe("ses_123")
+    })
+
+    it("accumulates a single text event as final text to append", () => {
+      const line = JSON.stringify({
+        type: "text",
+        sessionID: "ses_123",
+        part: { type: "text", text: "chunk one" },
+      })
+      const result = parser(line)
+      expect(result.externalId).toBe("ses_123")
+      expect(result.finalText).toBe("chunk one")
+      expect(result.appendFinalText).toBe(true)
+    })
+
+    it("returns each text event's chunk in order for the caller to accumulate", () => {
+      const chunks = [
+        JSON.stringify({ type: "text", sessionID: "ses_1", part: { type: "text", text: "first" } }),
+        JSON.stringify({ type: "text", sessionID: "ses_1", part: { type: "text", text: "second" } }),
+      ].map((line) => parser(line))
+      expect(chunks.map((c) => c.finalText)).toEqual(["first", "second"])
+      expect(chunks.every((c) => c.appendFinalText)).toBe(true)
+    })
+
+    it("returns progress for non-JSON lines", () => {
+      expect(parser("plain output").progressText).toBe("plain output")
+    })
+
+    it("ignores unrelated event types but still reports the session id", () => {
+      const line = JSON.stringify({ type: "tool_use", sessionID: "ses_9", part: { type: "tool" } })
+      const result = parser(line)
+      expect(result.externalId).toBe("ses_9")
+      expect(result.finalText).toBeUndefined()
+      expect(result.progressText).toBeUndefined()
+    })
+
+    it("returns an empty result for JSON values that are not objects", () => {
+      expect(parser("null")).toEqual({})
+    })
+  })
+
   describe("raw parser", () => {
     const parser = getParser("raw")
 

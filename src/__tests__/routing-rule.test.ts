@@ -22,4 +22,10 @@ describe("buildRoutingRule", () => {
     expect(rule).toContain("custom-cli")
     expect(rule).toContain("custom-cli_reply")
   })
+
+  it("uses the reply tool override when given", () => {
+    const rule = buildRoutingRule("codex", "mcp__cli-dispatch__codex_reply")
+    expect(rule).toContain("mcp__cli-dispatch__codex_reply")
+    expect(rule).not.toContain('"prompt" argument to the codex_reply tool')
+  })
 })

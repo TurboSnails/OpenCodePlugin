@@ -74,6 +74,43 @@ const DEFAULT_CONFIG = {
         },
     },
 };
+export function validateDelegates(delegates) {
+    const errors = [];
+    for (const [name, delegate] of Object.entries(delegates)) {
+        if (!/^[\w-]+$/.test(name)) {
+            errors.push(`delegate "${name}": name must match /^[\\w-]+$/ (letters, digits, underscore, hyphen) or it would produce invalid tool names`);
+        }
+        if (typeof delegate !== "object" || delegate === null) {
+            errors.push(`delegate "${name}": must be an object`);
+            continue;
+        }
+        const d = delegate;
+        if (typeof d.binary !== "string") {
+            errors.push(`delegate "${name}": missing or invalid "binary" field`);
+        }
+        if (typeof d.parser !== "string" || !["claude", "codex", "opencode", "raw"].includes(d.parser)) {
+            errors.push(`delegate "${name}": "parser" must be "claude", "codex", "opencode", or "raw"`);
+        }
+        if (!Array.isArray(d.startArgs) || !d.startArgs.every((a) => typeof a === "string")) {
+            errors.push(`delegate "${name}": "startArgs" must be an array of strings`);
+        }
+        else if (!d.startArgs.some((a) => a.includes("{prompt}"))) {
+            errors.push(`delegate "${name}": "startArgs" must contain the {prompt} placeholder, otherwise the CLI runs without the user's task`);
+        }
+        if (!Array.isArray(d.replyArgs) || !d.replyArgs.every((a) => typeof a === "string")) {
+            errors.push(`delegate "${name}": "replyArgs" must be an array of strings`);
+        }
+        else if (!d.replyArgs.some((a) => a.includes("{externalId}"))) {
+            // Warning only: a raw delegate without any session concept may
+            // legitimately have nothing to resume.
+            console.warn(`[cli-dispatch] delegate "${name}": "replyArgs" has no {externalId} placeholder; ${name}_reply will not be able to resume a session`);
+        }
+        if (d.timeoutMs !== undefined && (typeof d.timeoutMs !== "number" || !(d.timeoutMs > 0))) {
+            errors.push(`delegate "${name}": "timeoutMs" must be a positive number`);
+        }
+    }
+    return errors;
+}
 function validateConfig(config) {
     const errors = [];
     if (typeof config !== "object" || config === null) {
@@ -95,40 +132,7 @@ function validateConfig(config) {
             }
         }
     }
-    const delegates = obj.delegates;
-    for (const [name, delegate] of Object.entries(delegates)) {
-        if (!/^[\w-]+$/.test(name)) {
-            errors.push(`delegate "${name}": name must match /^[\\w-]+$/ (letters, digits, underscore, hyphen) or it would produce invalid tool names`);
-        }
-        if (typeof delegate !== "object" || delegate === null) {
-            errors.push(`delegate "${name}": must be an object`);
-            continue;
-        }
-        const d = delegate;
-        if (typeof d.binary !== "string") {
-            errors.push(`delegate "${name}": missing or invalid "binary" field`);
-        }
-        if (typeof d.parser !== "string" || !["claude", "codex", "raw"].includes(d.parser)) {
-            errors.push(`delegate "${name}": "parser" must be "claude", "codex", or "raw"`);
-        }
-        if (!Array.isArray(d.startArgs) || !d.startArgs.every((a) => typeof a === "string")) {
-            errors.push(`delegate "${name}": "startArgs" must be an array of strings`);
-        }
-        else if (!d.startArgs.some((a) => a.includes("{prompt}"))) {
-            errors.push(`delegate "${name}": "startArgs" must contain the {prompt} placeholder, otherwise the CLI runs without the user's task`);
-        }
-        if (!Array.isArray(d.replyArgs) || !d.replyArgs.every((a) => typeof a === "string")) {
-            errors.push(`delegate "${name}": "replyArgs" must be an array of strings`);
-        }
-        else if (!d.replyArgs.some((a) => a.includes("{externalId}"))) {
-            // Warning only: a raw delegate without any session concept may
-            // legitimately have nothing to resume.
-            console.warn(`[cli-dispatch] delegate "${name}": "replyArgs" has no {externalId} placeholder; ${name}_reply will not be able to resume a session`);
-        }
-        if (d.timeoutMs !== undefined && (typeof d.timeoutMs !== "number" || !(d.timeoutMs > 0))) {
-            errors.push(`delegate "${name}": "timeoutMs" must be a positive number`);
-        }
-    }
+    errors.push(...validateDelegates(obj.delegates));
     return errors;
 }
 export function loadConfig(configPath) {

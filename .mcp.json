@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cli-dispatch": {
+      "command": "bun",
+      "args": ["run", "${CLAUDE_PROJECT_DIR}/src/claude-code-adapter/mcp-server.ts"]
+    }
+  }
+}

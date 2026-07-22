@@ -52,5 +52,9 @@
         "{prompt}"
       ]
     }
-  }
+  },
+  "verifiedModels": [
+    "kimi-for-coding/k3",
+    "opencode/deepseek-v4-flash-free"
+  ]
 }

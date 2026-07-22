@@ -70,6 +70,26 @@ function parseCodexLine(line: string): ParsedLine {
   return {}
 }
 
+function parseOpencodeLine(line: string): ParsedLine {
+  let obj: unknown
+  try {
+    obj = JSON.parse(line)
+  } catch {
+    return { progressText: line }
+  }
+
+  if (!isEventObject(obj)) return {}
+
+  // sessionID is present on every opencode event line.
+  const externalId = typeof obj.sessionID === "string" ? obj.sessionID : undefined
+
+  if (obj.type === "text" && typeof obj.part?.text === "string") {
+    return { externalId, progressText: obj.part.text, finalText: obj.part.text, appendFinalText: true }
+  }
+
+  return { externalId }
+}
+
 function parseRawLine(line: string): ParsedLine {
   return { progressText: line, finalText: line, appendFinalText: true }
 }
@@ -77,6 +97,7 @@ function parseRawLine(line: string): ParsedLine {
 const PARSERS: Record<ParserName, LineParser> = {
   claude: parseClaudeLine,
   codex: parseCodexLine,
+  opencode: parseOpencodeLine,
   raw: parseRawLine,
 }
 
