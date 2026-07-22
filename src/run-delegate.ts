@@ -5,22 +5,42 @@ export type SpawnOptions = {
   cwd?: string
 }
 
-export type SpawnFn = (
-  binary: string,
-  args: string[],
-  options?: SpawnOptions,
-) => {
+export type SpawnedProcess = {
   stdout: ReadableStream<Uint8Array>
   stderr: ReadableStream<Uint8Array>
   exited: Promise<number>
   kill: (signal?: "SIGTERM" | "SIGKILL") => void
+  // Kills the whole delegate process tree: the process group on POSIX,
+  // `taskkill /T` on Windows (design D5). Optional so test fakes stay small;
+  // runDelegate falls back to `kill` when absent.
+  killTree?: (signal?: "SIGTERM" | "SIGKILL") => void
 }
+
+export type SpawnFn = (
+  binary: string,
+  args: string[],
+  options?: SpawnOptions,
+) => SpawnedProcess
 
 export type RunDelegateResult = {
   finalText: string
   externalId?: string
   stderrText: string
 }
+
+// Output caps (design D5): exceeding any cap fails the run with a
+// "produced too much output" error instead of growing memory without bound.
+export const MAX_LINE_CHARS = 1_000_000
+export const MAX_STDOUT_CHARS = 10_000_000
+export const MAX_STDERR_CHARS = 2_000_000
+export const STDERR_EXCERPT_CHARS = 2000
+
+// Grace period between SIGTERM and SIGKILL when terminating a hung delegate.
+export const KILL_GRACE_MS = 2000
+
+// After process exit, pipes are drained for at most this long. A grandchild
+// holding a pipe open must not hang a finished run (design D5).
+export const DRAIN_GRACE_MS = 5000
 
 async function* readLines(stream: ReadableStream<Uint8Array>): AsyncGenerator<string> {
   const reader = stream.getReader()
@@ -33,8 +53,15 @@ async function* readLines(stream: ReadableStream<Uint8Array>): AsyncGenerator<st
       buffer += decoder.decode(value, { stream: true })
       let newlineIndex: number
       while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
-        yield buffer.slice(0, newlineIndex)
+        const line = buffer.slice(0, newlineIndex)
+        if (line.length > MAX_LINE_CHARS) {
+          throw new Error(`a single output line exceeded ${MAX_LINE_CHARS} characters`)
+        }
+        yield line
         buffer = buffer.slice(newlineIndex + 1)
+      }
+      if (buffer.length > MAX_LINE_CHARS) {
+        throw new Error(`a single output line exceeded ${MAX_LINE_CHARS} characters`)
       }
     }
     if (buffer.length > 0) yield buffer
@@ -47,13 +74,26 @@ export const defaultSpawn: SpawnFn = (binary, args, options) => {
   const proc = Bun.spawn([binary, ...args], {
     stdout: "pipe",
     stderr: "pipe",
+    // Own process group on POSIX so timeout/cancellation can kill the whole
+    // tree with one group signal; Windows uses taskkill /T in killTree below.
+    ...(process.platform === "win32" ? {} : { detached: true }),
     ...(options?.cwd ? { cwd: options.cwd } : {}),
   })
-  return { stdout: proc.stdout, stderr: proc.stderr, exited: proc.exited, kill: (signal) => proc.kill(signal) }
+  const killTree = (signal: "SIGTERM" | "SIGKILL" = "SIGTERM") => {
+    if (process.platform === "win32") {
+      Bun.spawnSync(["taskkill", "/pid", String(proc.pid), "/T", ...(signal === "SIGKILL" ? ["/F"] : [])])
+      return
+    }
+    try {
+      process.kill(-proc.pid, signal)
+    } catch {
+      try {
+        proc.kill(signal)
+      } catch {}
+    }
+  }
+  return { stdout: proc.stdout, stderr: proc.stderr, exited: proc.exited, kill: (signal) => proc.kill(signal), killTree }
 }
-
-// Grace period between SIGTERM and SIGKILL when terminating a hung delegate.
-export const KILL_GRACE_MS = 2000
 
 export async function runDelegate(options: {
   binary: string
@@ -64,6 +104,7 @@ export async function runDelegate(options: {
   cwd?: string
   timeoutMs?: number
   killGraceMs?: number
+  drainGraceMs?: number
   signal?: AbortSignal
 }): Promise<RunDelegateResult> {
   const spawn = options.spawn ?? defaultSpawn
@@ -73,13 +114,20 @@ export async function runDelegate(options: {
   let finalText = ""
   let externalId: string | undefined
   let stderrText = ""
+  let stdoutChars = 0
   let timedOut = false
   let cancelled = false
+  let capError: string | undefined
+
+  const killTree = (signal: "SIGTERM" | "SIGKILL") => {
+    if (child.killTree) child.killTree(signal)
+    else child.kill(signal)
+  }
 
   let killTimer: ReturnType<typeof setTimeout> | undefined
   const terminateChild = () => {
-    child.kill("SIGTERM")
-    killTimer = setTimeout(() => child.kill("SIGKILL"), options.killGraceMs ?? KILL_GRACE_MS)
+    killTree("SIGTERM")
+    killTimer = setTimeout(() => killTree("SIGKILL"), options.killGraceMs ?? KILL_GRACE_MS)
   }
 
   const onAbort = () => {
@@ -99,28 +147,53 @@ export async function runDelegate(options: {
     : undefined
 
   const stdoutTask = (async () => {
-    for await (const line of readLines(child.stdout)) {
-      if (!line.trim()) continue
-      const parsed = parseLine(line)
-      if (parsed.externalId) externalId = parsed.externalId
-      if (parsed.finalText !== undefined) {
-        finalText = parsed.appendFinalText && finalText ? `${finalText}\n${parsed.finalText}` : parsed.finalText
+    try {
+      for await (const line of readLines(child.stdout)) {
+        stdoutChars += line.length
+        if (stdoutChars > MAX_STDOUT_CHARS) {
+          throw new Error(`stdout exceeded ${MAX_STDOUT_CHARS} characters`)
+        }
+        if (!line.trim()) continue
+        const parsed = parseLine(line)
+        if (parsed.externalId) externalId = parsed.externalId
+        if (parsed.finalText !== undefined) {
+          finalText = parsed.appendFinalText && finalText ? `${finalText}\n${parsed.finalText}` : parsed.finalText
+        }
+        if (parsed.progressText) options.onProgress(parsed.progressText)
       }
-      if (parsed.progressText) options.onProgress(parsed.progressText)
+    } catch (err) {
+      capError = `${options.binary} produced too much output: ${err instanceof Error ? err.message : String(err)}`
+      terminateChild()
     }
   })()
 
   const stderrTask = (async () => {
-    for await (const line of readLines(child.stderr)) {
-      stderrText += line + "\n"
+    try {
+      for await (const line of readLines(child.stderr)) {
+        if (stderrText.length + line.length > MAX_STDERR_CHARS) {
+          throw new Error(`stderr exceeded ${MAX_STDERR_CHARS} characters`)
+        }
+        stderrText += line + "\n"
+      }
+    } catch (err) {
+      capError = `${options.binary} produced too much output: ${err instanceof Error ? err.message : String(err)}`
+      terminateChild()
     }
   })()
 
+  // The source of truth for "the run is over" is process exit, not stream
+  // EOF — grandchildren holding pipes open must not hang the run.
   const exitCode = await child.exited
   if (timer) clearTimeout(timer)
   if (killTimer) clearTimeout(killTimer)
   options.signal?.removeEventListener("abort", onAbort)
-  await Promise.all([stdoutTask, stderrTask])
+
+  // Drain whatever the pipes still hold after exit, but never longer than
+  // the grace period.
+  await Promise.race([
+    Promise.all([stdoutTask, stderrTask]),
+    new Promise<void>((resolve) => setTimeout(resolve, options.drainGraceMs ?? DRAIN_GRACE_MS)),
+  ])
 
   if (cancelled) {
     throw new Error(`${options.binary} cancelled by user`)
@@ -130,8 +203,13 @@ export async function runDelegate(options: {
     throw new Error(`${options.binary} timed out after ${options.timeoutMs}ms`)
   }
 
-  if (exitCode !== 0 && !finalText) {
-    throw new Error(`${options.binary} exited with code ${exitCode}: ${stderrText.slice(0, 2000)}`)
+  if (capError) {
+    throw new Error(capError)
+  }
+
+  // A non-zero exit is a failure even when final text was produced (D5).
+  if (exitCode !== 0) {
+    throw new Error(`${options.binary} exited with code ${exitCode}: ${stderrText.slice(0, STDERR_EXCERPT_CHARS)}`)
   }
 
   return { finalText, externalId, stderrText }

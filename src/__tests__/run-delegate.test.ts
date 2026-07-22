@@ -1,5 +1,8 @@
 import { describe, it, expect } from "bun:test"
-import { runDelegate, type SpawnFn, type SpawnOptions } from "../run-delegate"
+import { mkdtempSync, rmSync, existsSync } from "fs"
+import { tmpdir } from "os"
+import { join } from "path"
+import { runDelegate, MAX_STDOUT_CHARS, MAX_LINE_CHARS, type SpawnFn, type SpawnOptions } from "../run-delegate"
 
 function fakeSpawn(stdoutLines: string[], stderrLines: string[] = [], exitCode = 0): SpawnFn {
   return () => ({
@@ -221,5 +224,98 @@ describe("runDelegate", () => {
       timeoutMs: 5000,
     })
     expect(result.finalText).toBe("done")
+  })
+
+  it("reports a non-zero exit as failure even when final text was produced", async () => {
+    await expect(
+      runDelegate({
+        binary: "codex",
+        args: [],
+        parser: "codex",
+        onProgress: () => {},
+        spawn: fakeSpawn(['{"type":"item.completed","item":{"type":"agent_message","text":"done"}}'], ["boom"], 1),
+      }),
+    ).rejects.toThrow("exited with code 1")
+  })
+
+  it("includes a capped stderr excerpt in the non-zero exit error", async () => {
+    await expect(
+      runDelegate({
+        binary: "codex",
+        args: [],
+        parser: "codex",
+        onProgress: () => {},
+        spawn: fakeSpawn([], ["x".repeat(5000)], 3),
+      }),
+    ).rejects.toThrow(/^codex exited with code 3: x{1,2500}$/)
+  })
+
+  it("fails the run when stdout exceeds the cap", async () => {
+    let resolveExit!: (code: number) => void
+    const exited = new Promise<number>((r) => { resolveExit = r })
+    const spawn: SpawnFn = () => ({
+      stdout: new Response("x".repeat(MAX_STDOUT_CHARS + 1)).body!,
+      stderr: new Response("").body!,
+      exited,
+      kill: () => resolveExit(1),
+    })
+    await expect(
+      runDelegate({ binary: "fake", args: [], parser: "raw", onProgress: () => {}, spawn, killGraceMs: 10, drainGraceMs: 10 }),
+    ).rejects.toThrow("produced too much output")
+  })
+
+  it("fails the run when a single output line exceeds the line cap", async () => {
+    let resolveExit!: (code: number) => void
+    const exited = new Promise<number>((r) => { resolveExit = r })
+    const spawn: SpawnFn = () => ({
+      stdout: new Response("x".repeat(MAX_LINE_CHARS + 1) + "\n").body!,
+      stderr: new Response("").body!,
+      exited,
+      kill: () => resolveExit(1),
+    })
+    await expect(
+      runDelegate({ binary: "fake", args: [], parser: "raw", onProgress: () => {}, spawn, killGraceMs: 10, drainGraceMs: 10 }),
+    ).rejects.toThrow("produced too much output")
+  })
+
+  it("kills the process tree on timeout and does not wait for pipes held open by a grandchild", async () => {
+    const killSignals: Array<string | undefined> = []
+    let resolveExit!: (code: number) => void
+    const exited = new Promise<number>((r) => { resolveExit = r })
+    const spawn: SpawnFn = () => ({
+      stdout: new ReadableStream({ start() {} }), // never emits, never ends
+      stderr: new ReadableStream({ start() {} }),
+      exited,
+      kill: () => {},
+      killTree: (signal) => {
+        killSignals.push(signal)
+        if (signal === "SIGKILL") resolveExit(9)
+      },
+    })
+    await expect(
+      runDelegate({ binary: "fake", args: [], parser: "raw", onProgress: () => {}, spawn, timeoutMs: 50, killGraceMs: 20, drainGraceMs: 20 }),
+    ).rejects.toThrow("timed out")
+    expect(killSignals).toEqual(["SIGTERM", "SIGKILL"])
+  })
+
+  it.skipIf(process.platform === "win32")("kills the whole process tree on timeout (real spawn)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cli-dispatch-tree-test-"))
+    const marker = join(dir, "grandchild-alive")
+    try {
+      await expect(
+        runDelegate({
+          binary: "bun",
+          args: ["-e", `Bun.spawn(["bun","-e","setTimeout(()=>Bun.write(\\"${marker}\\",'x'),400)"],{stdout:'inherit',stderr:'inherit'});await new Promise(r=>setTimeout(r,60000))`],
+          parser: "raw",
+          onProgress: () => {},
+          timeoutMs: 300,
+          killGraceMs: 100,
+        }),
+      ).rejects.toThrow("timed out")
+      await Bun.sleep(800)
+      expect(existsSync(marker)).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
