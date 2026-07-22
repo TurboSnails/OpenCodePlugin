@@ -19,7 +19,7 @@ describe("createCliDispatchPlugin", () => {
     }
   })
 
-  it("registers delegate tools and no diagnostic tool when config is valid", async () => {
+  it("registers delegate tools and the diagnostic doctor tool when config is valid", async () => {
     const configPath = join(TEST_DIR, "config.json")
     writeFileSync(
       configPath,
@@ -38,11 +38,15 @@ describe("createCliDispatchPlugin", () => {
     const hooks = await createCliDispatchPlugin(configPath)({} as any)
 
     expect(hooks.tool).toBeDefined()
-    expect(Object.keys(hooks.tool!)).toEqual(["myagent_start", "myagent_reply", "myagent_check"])
-    expect(hooks.tool!.cli_dispatch_status).toBeUndefined()
+    expect(Object.keys(hooks.tool!)).toEqual([
+      "myagent_start",
+      "myagent_reply",
+      "myagent_check",
+      "cli_dispatch_doctor",
+    ])
   })
 
-  it("registers only a diagnostic tool when config is broken", async () => {
+  it("registers diagnostic tools when config is broken", async () => {
     const configPath = join(TEST_DIR, "broken.json")
     writeFileSync(
       configPath,
@@ -61,7 +65,7 @@ describe("createCliDispatchPlugin", () => {
     expect(error).toHaveBeenCalled()
     error.mockRestore()
 
-    expect(Object.keys(hooks.tool!)).toEqual(["cli_dispatch_status"])
+    expect(Object.keys(hooks.tool!)).toEqual(["cli_dispatch_status", "cli_dispatch_doctor"])
     expect(hooks.tool!["bad agent_start"]).toBeUndefined()
   })
 

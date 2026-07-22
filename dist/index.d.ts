@@ -9,6 +9,7 @@ export { getActiveDelegate, setActiveDelegate, clearActiveDelegate } from "./ses
 export { buildRoutingRule } from "./routing-rule";
 export { getParser } from "./parse-events";
 export { checkDelegate, makeCheckTool } from "./health-check";
+export { makeDoctorTool } from "./doctor/tool";
 export declare function createCliDispatchPlugin(configPath?: string, options?: {
     commandsDir?: string;
 }): Plugin;

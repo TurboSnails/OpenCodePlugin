@@ -2,6 +2,7 @@ import { tool } from "@opencode-ai/plugin";
 import { loadConfig } from "./config";
 import { makeStartTool, makeReplyTool } from "./delegate-tools";
 import { makeCheckTool } from "./health-check";
+import { makeDoctorTool } from "./doctor/tool";
 import { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore } from "./hooks";
 import { generateCommands } from "./commands";
 export { loadConfig, resolveArgs } from "./config";
@@ -13,6 +14,7 @@ export { getActiveDelegate, setActiveDelegate, clearActiveDelegate } from "./ses
 export { buildRoutingRule } from "./routing-rule";
 export { getParser } from "./parse-events";
 export { checkDelegate, makeCheckTool } from "./health-check";
+export { makeDoctorTool } from "./doctor/tool";
 export function createCliDispatchPlugin(configPath, options) {
     return async () => {
         let tools;
@@ -23,18 +25,21 @@ export function createCliDispatchPlugin(configPath, options) {
                 generateCommands(config, options.commandsDir);
             }
             // Generate tools dynamically from config
-            tools = Object.fromEntries(Object.entries(config.delegates).flatMap(([name, cfg]) => [
-                [`${name}_start`, makeStartTool(name, cfg)],
-                [`${name}_reply`, makeReplyTool(name, cfg)],
-                [`${name}_check`, makeCheckTool(name, cfg)],
-            ]));
+            tools = {
+                ...Object.fromEntries(Object.entries(config.delegates).flatMap(([name, cfg]) => [
+                    [`${name}_start`, makeStartTool(name, cfg)],
+                    [`${name}_reply`, makeReplyTool(name, cfg)],
+                    [`${name}_check`, makeCheckTool(name, cfg)],
+                ])),
+                cli_dispatch_doctor: makeDoctorTool(),
+            };
         }
         catch (err) {
             console.error("[cli-dispatch] Failed to load config:", err);
             // Degrade to a single diagnostic tool so users can discover why no
             // delegate tools were registered instead of hitting "tool not found".
             config = { delegates: {} };
-            tools = { cli_dispatch_status: makeStatusTool(err) };
+            tools = { cli_dispatch_status: makeStatusTool(err), cli_dispatch_doctor: makeDoctorTool() };
         }
         return {
             tool: tools,
