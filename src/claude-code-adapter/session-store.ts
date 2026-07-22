@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "fs"
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import type { DelegateStore } from "../delegate-store"
@@ -32,8 +32,19 @@ function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
+// State is per-user only (design D7): directory 0700, files 0600.
+function ensureStateDir(dir: string): void {
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  try {
+    chmodSync(dir, 0o700)
+  } catch {}
+}
+
+// Entries older than 24 hours are ignored — minimal recovery, not a broker.
+export const STATE_TTL_MS = 24 * 60 * 60 * 1000
+
 function acquireLock(sessionId: string, dir: string): string {
-  mkdirSync(dir, { recursive: true })
+  ensureStateDir(dir)
   const lock = lockDir(sessionId, dir)
   for (let attempt = 0; attempt < 100; attempt++) {
     try {
@@ -90,6 +101,9 @@ export function getActiveDelegate(sessionId: string, dir: string = defaultStateD
   try {
     const obj = JSON.parse(readFileSync(stateFile(sessionId, dir), "utf-8"))
     if (typeof obj?.delegate === "string" && typeof obj?.externalId === "string") {
+      if (typeof obj.updatedAt === "number" && Date.now() - obj.updatedAt > STATE_TTL_MS) {
+        return undefined
+      }
       return { delegate: obj.delegate, externalId: obj.externalId }
     }
     return undefined
@@ -99,10 +113,10 @@ export function getActiveDelegate(sessionId: string, dir: string = defaultStateD
 }
 
 function writeStateFile(sessionId: string, delegate: string, externalId: string, dir: string): void {
-  mkdirSync(dir, { recursive: true })
+  ensureStateDir(dir)
   const file = stateFile(sessionId, dir)
   const tmp = `${file}.${process.pid}.tmp`
-  writeFileSync(tmp, JSON.stringify({ delegate, externalId }), "utf-8")
+  writeFileSync(tmp, JSON.stringify({ delegate, externalId, updatedAt: Date.now() }), { encoding: "utf-8", mode: 0o600 })
   renameSync(tmp, file)
 }
 

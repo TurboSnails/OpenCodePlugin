@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin";
 import { startDelegateTurn, replyDelegateTurn } from "./delegate-turn";
-import { getSessionAgent, memoryDelegateStore } from "./session-store";
+import { getSessionAgent, memoryDelegateStore, takeSessionNotice } from "./session-store";
 export { snapshotWorktree, buildChangeSummary } from "./worktree-summary";
 // opencode agents confirmed (via live spike, see delegate-permission-passthrough/design.md)
 // to inject a system prompt that tells the model file edits/tool calls are forbidden.
@@ -17,7 +17,7 @@ export function makeStartTool(name, cfg, run) {
             if (agent && RESTRICTIVE_AGENTS.has(agent)) {
                 return `The "${agent}" agent restricts delegate tool calls via its system prompt, so ${name}_start may be blocked or misbehave. Use /opencode to exit any active delegation, or switch to a less restrictive agent, before continuing.`;
             }
-            return startDelegateTurn({
+            const text = await startDelegateTurn({
                 name,
                 cfg,
                 store: memoryDelegateStore,
@@ -29,6 +29,10 @@ export function makeStartTool(name, cfg, run) {
                 cwd: context.directory ?? process.cwd(),
                 ...(run ? { run } : {}),
             });
+            const notice = takeSessionNotice(context.sessionID);
+            return notice?.kind === "restored"
+                ? `[plugin] Restored the active ${notice.delegate} delegation from saved state after a restart.\n\n${text}`
+                : text;
         },
     });
 }
@@ -39,13 +43,17 @@ export function makeReplyTool(name, cfg, run) {
         async execute(args, context) {
             const active = memoryDelegateStore.getActiveDelegate(context.sessionID);
             if (!active || active.delegate !== name) {
+                const notice = takeSessionNotice(context.sessionID);
+                if (notice?.kind === "lost") {
+                    throw new Error(`The saved delegation state for this session expired or was lost (e.g. after an opencode restart). Run /opencode to exit, then start again with /${name}.`);
+                }
                 throw new Error(`No active ${name} session for this conversation. Call ${name}_start first.`);
             }
             const agent = getSessionAgent(context.sessionID);
             if (agent && RESTRICTIVE_AGENTS.has(agent)) {
                 return `The "${agent}" agent restricts delegate follow-ups via its system prompt, so ${name}_reply may be blocked or misbehave. Use /opencode to exit this delegation, or switch to a less restrictive agent, before continuing.`;
             }
-            return replyDelegateTurn({
+            const text = await replyDelegateTurn({
                 name,
                 cfg,
                 store: memoryDelegateStore,
@@ -57,6 +65,10 @@ export function makeReplyTool(name, cfg, run) {
                 cwd: context.directory ?? process.cwd(),
                 ...(run ? { run } : {}),
             });
+            const notice = takeSessionNotice(context.sessionID);
+            return notice?.kind === "restored"
+                ? `[plugin] Restored the active ${notice.delegate} delegation from saved state after a restart.\n\n${text}`
+                : text;
         },
     });
 }

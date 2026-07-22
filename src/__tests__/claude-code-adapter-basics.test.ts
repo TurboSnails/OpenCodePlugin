@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "fs"
+import { mkdtempSync, rmSync, writeFileSync, statSync, readdirSync, readFileSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { isValidModelPattern, matchesModelPattern, loadAdapterConfig } from "../claude-code-adapter/config"
@@ -163,5 +163,32 @@ describe("setActiveDelegateIfLatest (file store)", () => {
     expect(store.getActiveDelegate("cc-latest-2")).toEqual({ delegate: "opencode", externalId: "ext-1" })
     store.clearActiveDelegate("cc-latest-2")
     expect(store.getActiveDelegate("cc-latest-2")).toBeUndefined()
+  })
+})
+
+describe("file store modes and TTL", () => {
+  it("creates the state dir with mode 0700 and state files with mode 0600", () => {
+    const fresh = join(dir, "modes-subdir")
+    setActiveDelegate("cc-modes-1", "codex", "ext-1", fresh)
+    expect(statSync(fresh).mode & 0o777).toBe(0o700)
+    const files = readdirSync(fresh).filter((f) => f.endsWith(".json") && !f.endsWith(".seq.json"))
+    expect(files.length).toBeGreaterThan(0)
+    for (const f of files) {
+      expect(statSync(join(fresh, f)).mode & 0o777).toBe(0o600)
+    }
+  })
+
+  it("ignores entries older than 24 hours", () => {
+    setActiveDelegate("cc-ttl-1", "codex", "ext-old", dir)
+    const file = join(dir, "cc-ttl-1.json")
+    const obj = JSON.parse(readFileSync(file, "utf-8"))
+    obj.updatedAt = Date.now() - 25 * 60 * 60 * 1000
+    writeFileSync(file, JSON.stringify(obj), "utf-8")
+    expect(getActiveDelegate("cc-ttl-1", dir)).toBeUndefined()
+  })
+
+  it("accepts fresh entries", () => {
+    setActiveDelegate("cc-ttl-2", "codex", "ext-new", dir)
+    expect(getActiveDelegate("cc-ttl-2", dir)).toEqual({ delegate: "codex", externalId: "ext-new" })
   })
 })

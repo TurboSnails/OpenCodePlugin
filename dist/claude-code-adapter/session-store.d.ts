@@ -4,6 +4,7 @@ export type DelegateSession = {
     externalId: string;
 };
 export declare function defaultStateDir(): string;
+export declare const STATE_TTL_MS: number;
 export declare function beginDelegateStart(sessionId: string, dir?: string): number;
 export declare function isLatestDelegateStart(sessionId: string, sequence: number, dir?: string): boolean;
 export declare function getActiveDelegate(sessionId: string, dir?: string): DelegateSession | undefined;
