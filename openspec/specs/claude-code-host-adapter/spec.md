@@ -25,7 +25,7 @@ Once a delegation to `codex` or `opencode` has been started, the system SHALL ro
 - **THEN** the system continues the existing delegate's session using its stored external session id, rather than answering with Claude Code's own model
 
 ### Requirement: Return to Claude Code
-The system SHALL provide a command that ends the active delegation for the current Claude Code conversation and returns to Claude Code's own model, following the same "say the host's own name to come home" convention as this repo's existing OpenCode `/opencode` command. The exact command name is a project decision to be confirmed before implementation.
+The system SHALL provide a command that ends the active delegation for the current Claude Code conversation and returns to Claude Code's own model, following the same "say the host's own name to come home" convention as this repo's existing OpenCode `/opencode` command. The command is `/cc`.
 
 #### Scenario: Returning to Claude Code exits the active delegation
 - **WHEN** the user has an active delegation and issues the return-to-Claude-Code command
