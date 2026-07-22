@@ -38,7 +38,7 @@ const DEFAULT_CONFIG = {
                 "stream-json",
                 "--verbose",
                 "--permission-mode",
-                "bypassPermissions",
+                "acceptEdits",
                 "--session-id",
                 "{sessionId}",
                 "--",
@@ -50,7 +50,7 @@ const DEFAULT_CONFIG = {
                 "stream-json",
                 "--verbose",
                 "--permission-mode",
-                "bypassPermissions",
+                "acceptEdits",
                 "--resume",
                 "{externalId}",
                 "--",
@@ -173,6 +173,7 @@ export function loadConfig(configPath) {
             }
         }
     }
+    console.warn("[cli-dispatch] No cli-dispatch.config.json found; using safe built-in defaults (claude runs with --permission-mode acceptEdits, codex with sandbox_mode=workspace-write). Place cli-dispatch.config.json in your project root to configure delegates; an explicit bypassPermissions entry remains available as an opt-in escalation.");
     return DEFAULT_CONFIG;
 }
 export function resolveArgs(args, vars) {

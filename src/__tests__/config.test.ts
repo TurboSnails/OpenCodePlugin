@@ -47,7 +47,7 @@ describe("loadConfig", () => {
     const config = loadConfig(join(TEST_DIR, "nonexistent.json"))
     expect(config.delegates.claude).toBeDefined()
     expect(config.delegates.codex).toBeDefined()
-    expect(config.delegates.claude.startArgs).toContain("bypassPermissions")
+    expect(config.delegates.claude.startArgs).toContain("acceptEdits")
     expect(config.delegates.codex.startArgs).toContain("sandbox_mode=workspace-write")
   })
 
@@ -414,6 +414,41 @@ describe("argv injection validation", () => {
     expect(validateDelegates(oc.delegates)).toEqual([])
     const cc = loadAdapterConfig(join(tmpdir(), `cli-dispatch-missing-cc-${process.pid}.json`))
     expect(validateDelegates(cc.delegates)).toEqual([])
+  })
+})
+
+describe("safe built-in defaults", () => {
+  it("claude built-in uses acceptEdits, not bypassPermissions", () => {
+    const config = loadConfig(join(tmpdir(), `cli-dispatch-missing-safe-${process.pid}.json`))
+    const claude = config.delegates.claude
+    expect(claude.startArgs).toContain("acceptEdits")
+    expect(claude.replyArgs).toContain("acceptEdits")
+    expect(claude.startArgs).not.toContain("bypassPermissions")
+    expect(claude.replyArgs).not.toContain("bypassPermissions")
+  })
+
+  it("warns loudly when no config file exists", () => {
+    const messages: string[] = []
+    const original = console.warn
+    console.warn = (msg) => messages.push(String(msg))
+    try {
+      loadConfig(join(tmpdir(), `cli-dispatch-missing-warn-${process.pid}.json`))
+    } finally {
+      console.warn = original
+    }
+    expect(messages.some((m) => m.includes("cli-dispatch.config.json") && m.includes("safe built-in defaults"))).toBe(true)
+  })
+
+  it("adapter warns loudly when no config file exists", () => {
+    const messages: string[] = []
+    const original = console.warn
+    console.warn = (msg) => messages.push(String(msg))
+    try {
+      loadAdapterConfig(join(tmpdir(), `cli-dispatch-missing-warn-cc-${process.pid}.json`))
+    } finally {
+      console.warn = original
+    }
+    expect(messages.some((m) => m.includes("claude-code-adapter.config.json") && m.includes("safe built-in defaults"))).toBe(true)
   })
 })
 

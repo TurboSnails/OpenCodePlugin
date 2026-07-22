@@ -89,6 +89,7 @@ export function loadAdapterConfig(configPath) {
             }
         }
     }
+    console.warn("[cli-dispatch] No claude-code-adapter.config.json found; using safe built-in defaults (codex runs with sandbox_mode=workspace-write, opencode with no permission-escalating flags). Place claude-code-adapter.config.json in your project root to configure delegates.");
     return DEFAULT_CONFIG;
 }
 //# sourceMappingURL=config.js.map
