@@ -4,6 +4,10 @@
 
 一个 [OpenCode](https://opencode.ai) 插件，用于把当前对话委托（delegate）给外部 CLI coding agent（Claude Code、Codex，或任何你自行配置的 CLI agent），并把它的响应实时流回 OpenCode 聊天界面。委托是**尽力而为的粘性（best-effort sticky）**路由：一旦开始委托，该会话后续的消息会持续路由给同一个 delegate，直到你显式退出——但这依赖模型主动调用 delegate 的 reply 工具，没有任何 hook 能强制这一点（见[已知限制](#已知限制)）。显式的 `/<delegate> <message>` 命令始终是触达 delegate 的可靠方式。
 
+## 快速上手
+
+见 [README.md Quickstart](README.md#quickstart)。卡住了？运行 `npx opencode-cli-dispatch doctor` 自检。
+
 ## 特性
 
 - **多 delegate 并存**：可以同时配置任意数量的 CLI agent（内置 `claude` 和 `codex` 两套预设）。
