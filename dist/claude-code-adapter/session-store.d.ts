@@ -1,3 +1,4 @@
+import type { DelegateStore } from "../delegate-store";
 export type DelegateSession = {
     delegate: string;
     externalId: string;
@@ -8,4 +9,6 @@ export declare function isLatestDelegateStart(sessionId: string, sequence: numbe
 export declare function getActiveDelegate(sessionId: string, dir?: string): DelegateSession | undefined;
 export declare function setActiveDelegate(sessionId: string, delegate: string, externalId: string, dir?: string): void;
 export declare function clearActiveDelegate(sessionId: string, dir?: string): void;
+export declare function setActiveDelegateIfLatest(sessionId: string, delegate: string, externalId: string, sequence: number, dir?: string): boolean;
+export declare function fileDelegateStore(dir?: string): DelegateStore;
 //# sourceMappingURL=session-store.d.ts.map

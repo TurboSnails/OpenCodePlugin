@@ -1,7 +1,7 @@
-export type DelegateSession = {
-  delegate: string
-  externalId: string
-}
+import type { DelegateStore } from "./delegate-store"
+
+export type { DelegateSession } from "./delegate-store"
+import type { DelegateSession } from "./delegate-store"
 
 export type SessionModel = {
   providerID: string
@@ -36,6 +36,22 @@ export function beginDelegateStart(opencodeSessionID: string): number {
 
 export function isLatestDelegateStart(opencodeSessionID: string, sequence: number): boolean {
   return startSequences.get(opencodeSessionID) === sequence
+}
+
+// Atomic variant of the beginDelegateStart/isLatestDelegateStart pair: an
+// earlier start that finishes later cannot overwrite a newer delegation.
+export function setActiveDelegateIfLatest(opencodeSessionID: string, delegate: string, externalId: string, sequence: number): boolean {
+  if (startSequences.get(opencodeSessionID) !== sequence) return false
+  sessions.set(opencodeSessionID, { delegate, externalId })
+  return true
+}
+
+export const memoryDelegateStore: DelegateStore = {
+  getActiveDelegate,
+  setActiveDelegate,
+  clearActiveDelegate,
+  beginDelegateStart,
+  setActiveDelegateIfLatest,
 }
 
 export function getSessionAgent(opencodeSessionID: string): string | undefined {

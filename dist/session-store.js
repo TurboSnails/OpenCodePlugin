@@ -22,6 +22,21 @@ export function beginDelegateStart(opencodeSessionID) {
 export function isLatestDelegateStart(opencodeSessionID, sequence) {
     return startSequences.get(opencodeSessionID) === sequence;
 }
+// Atomic variant of the beginDelegateStart/isLatestDelegateStart pair: an
+// earlier start that finishes later cannot overwrite a newer delegation.
+export function setActiveDelegateIfLatest(opencodeSessionID, delegate, externalId, sequence) {
+    if (startSequences.get(opencodeSessionID) !== sequence)
+        return false;
+    sessions.set(opencodeSessionID, { delegate, externalId });
+    return true;
+}
+export const memoryDelegateStore = {
+    getActiveDelegate,
+    setActiveDelegate,
+    clearActiveDelegate,
+    beginDelegateStart,
+    setActiveDelegateIfLatest,
+};
 export function getSessionAgent(opencodeSessionID) {
     return sessionAgents.get(opencodeSessionID);
 }

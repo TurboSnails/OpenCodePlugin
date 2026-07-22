@@ -4,7 +4,7 @@ import { tmpdir } from "os"
 import { join } from "path"
 import { isValidModelPattern, matchesModelPattern, loadAdapterConfig } from "../claude-code-adapter/config"
 import { getCurrentModel } from "../claude-code-adapter/current-model"
-import { getActiveDelegate, setActiveDelegate, clearActiveDelegate } from "../claude-code-adapter/session-store"
+import { getActiveDelegate, setActiveDelegate, clearActiveDelegate, beginDelegateStart, setActiveDelegateIfLatest, fileDelegateStore } from "../claude-code-adapter/session-store"
 
 let dir: string
 
@@ -143,5 +143,25 @@ describe("session-store (file-backed)", () => {
   it("sanitizes session ids that are not file-name safe", () => {
     setActiveDelegate("weird/session:id", "codex", "thread-1", dir)
     expect(getActiveDelegate("weird/session:id", dir)).toEqual({ delegate: "codex", externalId: "thread-1" })
+  })
+})
+
+describe("setActiveDelegateIfLatest (file store)", () => {
+  it("rejects an older sequence atomically and accepts the latest", () => {
+    const first = beginDelegateStart("cc-latest-1", dir)
+    const second = beginDelegateStart("cc-latest-1", dir)
+    expect(setActiveDelegateIfLatest("cc-latest-1", "codex", "ext-old", first, dir)).toBe(false)
+    expect(getActiveDelegate("cc-latest-1", dir)).toBeUndefined()
+    expect(setActiveDelegateIfLatest("cc-latest-1", "codex", "ext-new", second, dir)).toBe(true)
+    expect(getActiveDelegate("cc-latest-1", dir)).toEqual({ delegate: "codex", externalId: "ext-new" })
+  })
+
+  it("fileDelegateStore implements the DelegateStore interface", () => {
+    const store = fileDelegateStore(dir)
+    const seq = store.beginDelegateStart("cc-latest-2")
+    expect(store.setActiveDelegateIfLatest("cc-latest-2", "opencode", "ext-1", seq)).toBe(true)
+    expect(store.getActiveDelegate("cc-latest-2")).toEqual({ delegate: "opencode", externalId: "ext-1" })
+    store.clearActiveDelegate("cc-latest-2")
+    expect(store.getActiveDelegate("cc-latest-2")).toBeUndefined()
   })
 })

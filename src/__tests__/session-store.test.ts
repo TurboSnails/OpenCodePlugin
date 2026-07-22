@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test"
-import { getActiveDelegate, setActiveDelegate, clearActiveDelegate, getSessionAgent, setSessionAgent, getSessionModel, setSessionModel } from "../session-store"
+import { getActiveDelegate, setActiveDelegate, clearActiveDelegate, getSessionAgent, setSessionAgent, getSessionModel, setSessionModel, beginDelegateStart, setActiveDelegateIfLatest, memoryDelegateStore } from "../session-store"
 
 describe("session-store", () => {
   beforeEach(() => {
@@ -80,5 +80,26 @@ describe("session model cache", () => {
     setSessionModel("model-session-2", { providerID: "anthropic", modelID: "claude-sonnet-4-5" })
     setSessionModel("model-session-2", { providerID: "minimax-cn", modelID: "MiniMax-M2.5" })
     expect(getSessionModel("model-session-2")).toEqual({ providerID: "minimax-cn", modelID: "MiniMax-M2.5" })
+  })
+})
+
+describe("setActiveDelegateIfLatest (memory)", () => {
+  it("registers when the sequence is current and rejects an older sequence", () => {
+    const session = "mem-latest-1"
+    const first = beginDelegateStart(session)
+    const second = beginDelegateStart(session)
+    expect(setActiveDelegateIfLatest(session, "codex", "ext-old", first)).toBe(false)
+    expect(getActiveDelegate(session)).toBeUndefined()
+    expect(setActiveDelegateIfLatest(session, "codex", "ext-new", second)).toBe(true)
+    expect(getActiveDelegate(session)).toEqual({ delegate: "codex", externalId: "ext-new" })
+  })
+
+  it("memoryDelegateStore implements the DelegateStore interface", () => {
+    const session = "mem-latest-2"
+    const seq = memoryDelegateStore.beginDelegateStart(session)
+    expect(memoryDelegateStore.setActiveDelegateIfLatest(session, "claude", "ext-1", seq)).toBe(true)
+    expect(memoryDelegateStore.getActiveDelegate(session)).toEqual({ delegate: "claude", externalId: "ext-1" })
+    memoryDelegateStore.clearActiveDelegate(session)
+    expect(memoryDelegateStore.getActiveDelegate(session)).toBeUndefined()
   })
 })

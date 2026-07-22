@@ -86,16 +86,38 @@ export function getActiveDelegate(sessionId, dir = defaultStateDir()) {
         return undefined;
     }
 }
-export function setActiveDelegate(sessionId, delegate, externalId, dir = defaultStateDir()) {
+function writeStateFile(sessionId, delegate, externalId, dir) {
     mkdirSync(dir, { recursive: true });
     const file = stateFile(sessionId, dir);
     const tmp = `${file}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify({ delegate, externalId }), "utf-8");
     renameSync(tmp, file);
 }
+export function setActiveDelegate(sessionId, delegate, externalId, dir = defaultStateDir()) {
+    writeStateFile(sessionId, delegate, externalId, dir);
+}
 export function clearActiveDelegate(sessionId, dir = defaultStateDir()) {
     const file = stateFile(sessionId, dir);
     if (existsSync(file))
         rmSync(file);
+}
+// Atomic check-then-set under the session lock: an earlier start that
+// finishes later cannot overwrite a newer delegation (design D6).
+export function setActiveDelegateIfLatest(sessionId, delegate, externalId, sequence, dir = defaultStateDir()) {
+    return withSessionLock(sessionId, dir, () => {
+        if (readStartSequence(sessionId, dir) !== sequence)
+            return false;
+        writeStateFile(sessionId, delegate, externalId, dir);
+        return true;
+    });
+}
+export function fileDelegateStore(dir = defaultStateDir()) {
+    return {
+        getActiveDelegate: (key) => getActiveDelegate(key, dir),
+        setActiveDelegate: (key, delegate, externalId) => setActiveDelegate(key, delegate, externalId, dir),
+        clearActiveDelegate: (key) => clearActiveDelegate(key, dir),
+        beginDelegateStart: (key) => beginDelegateStart(key, dir),
+        setActiveDelegateIfLatest: (key, delegate, externalId, sequence) => setActiveDelegateIfLatest(key, delegate, externalId, sequence, dir),
+    };
 }
 //# sourceMappingURL=session-store.js.map

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
+import type { DelegateStore } from "../delegate-store"
 
 export type DelegateSession = {
   delegate: string
@@ -97,7 +98,7 @@ export function getActiveDelegate(sessionId: string, dir: string = defaultStateD
   }
 }
 
-export function setActiveDelegate(sessionId: string, delegate: string, externalId: string, dir: string = defaultStateDir()): void {
+function writeStateFile(sessionId: string, delegate: string, externalId: string, dir: string): void {
   mkdirSync(dir, { recursive: true })
   const file = stateFile(sessionId, dir)
   const tmp = `${file}.${process.pid}.tmp`
@@ -105,7 +106,31 @@ export function setActiveDelegate(sessionId: string, delegate: string, externalI
   renameSync(tmp, file)
 }
 
+export function setActiveDelegate(sessionId: string, delegate: string, externalId: string, dir: string = defaultStateDir()): void {
+  writeStateFile(sessionId, delegate, externalId, dir)
+}
+
 export function clearActiveDelegate(sessionId: string, dir: string = defaultStateDir()): void {
   const file = stateFile(sessionId, dir)
   if (existsSync(file)) rmSync(file)
+}
+
+// Atomic check-then-set under the session lock: an earlier start that
+// finishes later cannot overwrite a newer delegation (design D6).
+export function setActiveDelegateIfLatest(sessionId: string, delegate: string, externalId: string, sequence: number, dir: string = defaultStateDir()): boolean {
+  return withSessionLock(sessionId, dir, () => {
+    if (readStartSequence(sessionId, dir) !== sequence) return false
+    writeStateFile(sessionId, delegate, externalId, dir)
+    return true
+  })
+}
+
+export function fileDelegateStore(dir: string = defaultStateDir()): DelegateStore {
+  return {
+    getActiveDelegate: (key) => getActiveDelegate(key, dir),
+    setActiveDelegate: (key, delegate, externalId) => setActiveDelegate(key, delegate, externalId, dir),
+    clearActiveDelegate: (key) => clearActiveDelegate(key, dir),
+    beginDelegateStart: (key) => beginDelegateStart(key, dir),
+    setActiveDelegateIfLatest: (key, delegate, externalId, sequence) => setActiveDelegateIfLatest(key, delegate, externalId, sequence, dir),
+  }
 }
