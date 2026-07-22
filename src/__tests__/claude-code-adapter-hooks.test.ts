@@ -158,3 +158,44 @@ describe("decideUserPromptSubmit", () => {
     expect(decision).toEqual({ kind: "none" })
   })
 })
+
+describe("checkPreToolUse model gate", () => {
+  const gatedConfig: ClaudeCodeAdapterConfig = {
+    delegates: {
+      codex: { binary: "codex", parser: "codex", startArgs: ["exec", "--", "{prompt}"], replyArgs: ["exec", "resume", "--", "{externalId}", "{prompt}"] },
+    },
+    verifiedModels: ["claude-good-*"],
+  }
+
+  function writeTranscript(model?: string): string {
+    const path = join(dir, `transcript-${Math.random().toString(36).slice(2)}.jsonl`)
+    const lines = model ? [JSON.stringify({ message: { model } })] : [JSON.stringify({ message: {} })]
+    writeFileSync(path, lines.join("\n"), "utf-8")
+    return path
+  }
+
+  it("blocks a direct MCP delegate tool call for a known unverified model", () => {
+    const verdict = checkPreToolUse(
+      { tool_name: "mcp__cli-dispatch__codex_start", tool_input: { prompt: "hi" }, transcript_path: writeTranscript("claude-bad-1") },
+      gatedConfig,
+    )
+    expect(verdict.block).toBe(true)
+    if (verdict.block) expect(verdict.reason).toContain("claude-bad-1")
+  })
+
+  it("fails open when the transcript names no model", () => {
+    const verdict = checkPreToolUse(
+      { tool_name: "mcp__cli-dispatch__codex_start", tool_input: { prompt: "hi" }, transcript_path: writeTranscript() },
+      gatedConfig,
+    )
+    expect(verdict.block).toBe(false)
+  })
+
+  it("allows a verified model", () => {
+    const verdict = checkPreToolUse(
+      { tool_name: "mcp__cli-dispatch__codex_reply", tool_input: { prompt: "hi" }, transcript_path: writeTranscript("claude-good-5") },
+      gatedConfig,
+    )
+    expect(verdict.block).toBe(false)
+  })
+})

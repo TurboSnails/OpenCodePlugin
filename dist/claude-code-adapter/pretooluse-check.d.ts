@@ -1,9 +1,10 @@
-import type { ClaudeCodeAdapterConfig } from "./config";
+import { type ClaudeCodeAdapterConfig } from "./config";
 export declare const MCP_SERVER_NAME = "cli-dispatch";
 export declare function mcpToolName(delegate: string, kind: "start" | "reply"): string;
 export type PreToolUseInput = {
     tool_name?: string;
     tool_input?: Record<string, unknown>;
+    transcript_path?: string;
 };
 export type PreToolUseVerdict = {
     block: false;

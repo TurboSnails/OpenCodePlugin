@@ -77,6 +77,17 @@ export function makeToolExecuteBefore(config) {
     return async (input, output) => {
         if (!delegateToolNames.has(input.tool))
             return;
+        // Model gate on the direct tool path (design D3): same allow-list as the
+        // slash-command path, so calling {name}_start/{name}_reply directly
+        // cannot bypass it. Unknown model fails open — this is a guardrail
+        // against known-bad models, not a sandbox.
+        const patterns = config.verifiedModels;
+        if (patterns && patterns.length > 0) {
+            const model = getSessionModel(input.sessionID);
+            if (model && !matchesVerifiedModel(model, patterns)) {
+                throw new Error(`[plugin] The current model (${model.providerID}/${model.modelID}) is not on the verified-models allow-list for CLI delegation, so ${input.tool} was blocked. Switch to a verified model and try again.`);
+            }
+        }
         const prompt = output.args?.prompt;
         if (typeof prompt === "string" && prompt.includes(GENERATED_MARKER)) {
             throw new Error(`${input.tool} rejected: the "prompt" argument contains the whole delegate command template instead of the user's actual message. Pass only the user's text as "prompt".`);

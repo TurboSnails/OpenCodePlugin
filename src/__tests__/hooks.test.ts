@@ -160,3 +160,55 @@ describe("makeToolExecuteBefore", () => {
     expect(output.args.prompt).toBe(GENERATED_MARKER)
   })
 })
+
+describe("makeToolExecuteBefore model gate", () => {
+  const config: CliDispatchConfig = {
+    delegates: {
+      claude: { binary: "claude", parser: "claude", startArgs: ["--", "{prompt}"], replyArgs: ["--resume", "{externalId}", "--", "{prompt}"] },
+    },
+    verifiedModels: ["good/model"],
+  }
+
+  it("blocks a direct delegate tool call for a known unverified model", async () => {
+    setSessionModel("gate-s1", { providerID: "bad", modelID: "model" })
+    const handler = makeToolExecuteBefore(config)
+    await expect(
+      handler({ tool: "claude_start", sessionID: "gate-s1", callID: "c1" }, { args: { prompt: "hi" } }),
+    ).rejects.toThrow("not on the verified-models allow-list")
+  })
+
+  it("blocks delegate replies as well as starts", async () => {
+    setSessionModel("gate-s2", { providerID: "bad", modelID: "model" })
+    const handler = makeToolExecuteBefore(config)
+    await expect(
+      handler({ tool: "claude_reply", sessionID: "gate-s2", callID: "c2" }, { args: { prompt: "hi" } }),
+    ).rejects.toThrow("claude_reply was blocked")
+  })
+
+  it("fails open when the model is unknown", async () => {
+    const handler = makeToolExecuteBefore(config)
+    await expect(
+      handler({ tool: "claude_start", sessionID: "gate-unknown", callID: "c3" }, { args: { prompt: "hi" } }),
+    ).resolves.toBeUndefined()
+  })
+
+  it("allows a verified model and ignores non-delegate tools", async () => {
+    setSessionModel("gate-s3", { providerID: "good", modelID: "model" })
+    const handler = makeToolExecuteBefore(config)
+    await expect(
+      handler({ tool: "claude_start", sessionID: "gate-s3", callID: "c4" }, { args: { prompt: "hi" } }),
+    ).resolves.toBeUndefined()
+    setSessionModel("gate-s4", { providerID: "bad", modelID: "model" })
+    await expect(
+      handler({ tool: "bash", sessionID: "gate-s4", callID: "c5" }, { args: {} }),
+    ).resolves.toBeUndefined()
+  })
+
+  it("applies no gate when verifiedModels is empty", async () => {
+    setSessionModel("gate-s5", { providerID: "bad", modelID: "model" })
+    const handler = makeToolExecuteBefore({ delegates: config.delegates })
+    await expect(
+      handler({ tool: "claude_start", sessionID: "gate-s5", callID: "c6" }, { args: { prompt: "hi" } }),
+    ).resolves.toBeUndefined()
+  })
+})

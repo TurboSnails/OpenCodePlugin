@@ -1,4 +1,6 @@
 import { GENERATED_MARKER } from "../policy";
+import { getCurrentModel } from "./current-model";
+import { matchesModelPattern } from "./config";
 // The MCP server name from .mcp.json; Claude Code names MCP tools
 // `mcp__<server>__<tool>` in hook payloads (design.md D3).
 export const MCP_SERVER_NAME = "cli-dispatch";
@@ -18,6 +20,20 @@ export function checkPreToolUse(input, config) {
             reason: `${input.tool_name} rejected: the "prompt" argument contains the whole delegate command template instead of the user's actual message. Pass only the user's text as "prompt".`,
         };
     }
-    return { block: false };
+    // Model gate on the direct tool path (design D3): the transcript-derived
+    // current model is checked against verifiedModels. Unknown model fails
+    // open — a guardrail against known-bad models, not a sandbox.
+    const patterns = config.verifiedModels;
+    if (!patterns || patterns.length === 0)
+        return { block: false };
+    const model = input.transcript_path ? getCurrentModel(input.transcript_path) : undefined;
+    if (!model)
+        return { block: false };
+    if (matchesModelPattern(model, patterns))
+        return { block: false };
+    return {
+        block: true,
+        reason: `[cli-dispatch] The current model (${model}) is not on the verified-models allow-list for CLI delegation, so ${input.tool_name} was blocked. Switch to a verified model and try again.`,
+    };
 }
 //# sourceMappingURL=pretooluse-check.js.map
