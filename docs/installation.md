@@ -38,15 +38,21 @@ Then register it in that project's `opencode.json` / `opencode.jsonc`:
 }
 ```
 
-**Important — slash commands are not bundled automatically.** The `/cc`, `/codex`, `/opencode` command files in this repo live under [.opencode/command/](../.opencode/command) and are committed by hand; they are *not* included in the npm tarball, and `createCliDispatchPlugin()` only (re)generates them when called with `options.commandsDir`. So after installing as an npm dependency, either:
+**Important — slash commands are generated automatically.** The `/cc`, `/codex`, and `/opencode` command files are written to `~/.config/opencode/commands/` by default on every plugin load. The `commandsDir` option is only needed if you want a project-local command directory instead. So after installing as an npm dependency, the typical setup is just:
 
-1. point `commandsDir` at the consuming project's own command directory so they're generated on every plugin load:
-   ```ts
-   // other-project/.opencode/plugin/cli-dispatch.ts
-   import { createCliDispatchPlugin } from "opencode-cli-dispatch"
-   export default createCliDispatchPlugin(undefined, { commandsDir: ".opencode/command" })
-   ```
-2. or manually copy this repo's `.opencode/command/cc.md`, `codex.md`, `opencode.md` into the consuming project's `.opencode/command/`.
+```ts
+// other-project/.opencode/plugin/cli-dispatch.ts
+import { createCliDispatchPlugin } from "opencode-cli-dispatch"
+export default createCliDispatchPlugin()
+```
+
+If you prefer project-local commands, point `commandsDir` at the consuming project's own command directory:
+
+```ts
+// other-project/.opencode/plugin/cli-dispatch.ts
+import { createCliDispatchPlugin } from "opencode-cli-dispatch"
+export default createCliDispatchPlugin(undefined, { commandsDir: ".opencode/command" })
+```
 
 ### Option B — local plugin file (no package install)
 
@@ -62,7 +68,7 @@ export default createCliDispatchPlugin()
 `createCliDispatchPlugin(configPath?, options?)` accepts:
 
 - `configPath` — override where the delegate config is loaded from (see below).
-- `options.commandsDir` — if set, regenerates the `/{name}` and `/opencode` slash command files into that directory on every plugin load (defaults to the committed files under `.opencode/command/`).
+- `options.commandsDir` — if set, regenerates the `/{name}` and `/opencode` slash command files into that directory on every plugin load (defaults to `~/.config/opencode/commands/`).
 
 ### Option C — install once, globally (all projects)
 
@@ -80,13 +86,6 @@ OpenCode installs npm/git plugin specs automatically via Bun at startup, caching
 
 Once published to npm, this simplifies to `"plugin": ["opencode-cli-dispatch"]`.
 
-**2. Get the slash commands globally too.** OpenCode loads markdown command files from `~/.config/opencode/commands/` for every project ([docs](https://opencode.ai/docs/commands/)). Copy this repo's `.opencode/command/*.md` there:
-
-```bash
-mkdir -p ~/.config/opencode/commands
-cp .opencode/command/*.md ~/.config/opencode/commands/
-```
-
-(There's no way to have `createCliDispatchPlugin`'s `commandsDir` option target this directory automatically from an npm-installed plugin today — it only runs relative to the config passed in at call time. Manual copy is the reliable path until that's wired up.)
+**2. The slash commands are written automatically.** `createCliDispatchPlugin()` writes the generated command files to `~/.config/opencode/commands/` by default on every plugin load, so the global copy step is normally not needed. If you want project-local commands instead, use the `commandsDir` option in a thin wrapper.
 
 **3. Global config still needs a delegate config file.** The `cli-dispatch.config.json` lookup (see [Configuration](configuration.md#configuration)) is relative to `process.cwd()`, i.e. whichever project you're in — not to `~/.config/opencode/`. With no config file present in a given project, the plugin falls back to its built-in `claude` + `codex` defaults, which is normally fine. If you want custom delegates/args everywhere, drop a `cli-dispatch.config.json` in each project, or pass an absolute `configPath` from a thin local wrapper (Option B) instead of the pure global-npm route.

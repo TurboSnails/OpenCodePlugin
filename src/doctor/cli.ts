@@ -1,14 +1,34 @@
-#!/usr/bin/env bun
-import { runChecks, applyFixes } from "./checks"
-import { makeContext } from "./context"
-import { formatResults } from "./format"
-import { runDelegate } from "../run-delegate"
+#!/usr/bin/env node
+import { spawnSync } from "child_process"
+import { existsSync } from "fs"
+import { join } from "path"
+import { fileURLToPath } from "url"
 
-const fix = process.argv.includes("--fix")
+const isBun = typeof process.versions.bun !== "undefined"
 
-const ctx = makeContext()
-const results = await runChecks(ctx, runDelegate)
-const final = fix ? applyFixes(results, ctx) : results
+function findBun(): string | null {
+  const executable = process.platform === "win32" ? "bun.exe" : "bun"
+  const paths = process.env.PATH?.split(process.platform === "win32" ? ";" : ":") ?? []
+  for (const dir of paths) {
+    const full = join(dir, executable)
+    if (existsSync(full)) return full
+  }
+  return null
+}
 
-console.log(formatResults(final))
-process.exit(final.some((r) => !r.ok) ? 1 : 0)
+if (!isBun) {
+  const bunPath = findBun()
+  if (!bunPath) {
+    console.error(
+      "cli-dispatch doctor requires Bun (https://bun.sh). Install it or run with: bunx opencode-cli-dispatch doctor",
+    )
+    process.exit(1)
+  }
+
+  const script = fileURLToPath(import.meta.url)
+  const args = process.argv.slice(2)
+  const result = spawnSync(bunPath, [script, ...args], { stdio: "inherit" })
+  process.exit(result.status ?? 1)
+}
+
+await import("./run-cli.js")

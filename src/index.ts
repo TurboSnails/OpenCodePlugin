@@ -52,7 +52,7 @@ export function createCliDispatchPlugin(configPath?: string, options?: { command
       }
     } catch (err) {
       console.error("[cli-dispatch] Failed to load config:", err)
-      // Degrade to a single diagnostic tool so users can discover why no
+      // Degrade to diagnostic tools so users can discover why no
       // delegate tools were registered instead of hitting "tool not found".
       config = { delegates: {} }
       tools = { cli_dispatch_status: makeStatusTool(err), cli_dispatch_doctor: makeDoctorTool() }

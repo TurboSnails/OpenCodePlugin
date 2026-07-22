@@ -38,6 +38,8 @@
 
 ## 打包
 
+> 本文档的最新英文版本在 [docs/installation.md](docs/installation.md)，以英文为准。
+
 `dist/` 目录已经提交进本仓库（没有被 gitignore），目的就是让这个包可以直接从 git 地址安装（见下方[方式三](#方式三一次性全局安装所有项目通用)），不需要在安装时再跑一次构建——因为 OpenCode 的 npm/git 插件安装器（底层用 Bun）默认**不会**执行 `prepare`/`postinstall` 之类的生命周期脚本。**以后改动 `src/` 下的代码时，请在同一次改动里重新构建并一并提交 `dist/`**，否则通过 git 安装的用户会一直用到旧的编译产物。
 
 这个仓库目前还没有发布到任何 npm registry，如果想在不走 git 的情况下安装到别处，可以先在本地打出一个 tarball：
@@ -51,6 +53,8 @@ npm pack              # 在仓库根目录生成 opencode-cli-dispatch-<version>
 `npm pack` 会根据 `package.json` 里的 `files` 字段（`dist/`、`cli-dispatch.config.json`）以及 `README.md`/`package.json` 打包 tarball；如果只想预览打包内容而不实际生成文件，先跑一遍 `npm pack --dry-run` 即可。
 
 ## 安装方式
+
+> 本文档的最新英文版本在 [docs/installation.md](docs/installation.md)，以英文为准。
 
 本项目设计为被其他 OpenCode 项目引用，可以通过 npm 依赖（用上面打出的 tarball，或将来发布到 registry 后的正式版本）或本地插件文件两种方式接入。
 
@@ -74,15 +78,21 @@ npm install "file:/path/to/mcpOC/opencode-cli-dispatch-1.0.0.tgz"
 }
 ```
 
-**注意——slash 命令不会自动打包进去。** `/cc`、`/codex`、`/opencode` 这几个命令文件位于本仓库的 [.opencode/command/](.opencode/command) 下，是手动维护并提交的，**并不包含**在 npm tarball 里；`createCliDispatchPlugin()` 只有在传入 `options.commandsDir` 时才会（重新）生成它们。所以以 npm 依赖方式安装后，需要二选一：
+**注意——slash 命令现在会自动生成。** 插件每次加载时都会把 `/cc`、`/codex`、`/opencode` 写到 `~/.config/opencode/commands/` 目录；`options.commandsDir` 仅在想要项目本地命令目录时才需要。所以以 npm 依赖方式安装后，典型用法就是：
 
-1. 在目标项目里让 `commandsDir` 指向自己的命令目录，插件每次加载时自动生成：
-   ```ts
-   // other-project/.opencode/plugin/cli-dispatch.ts
-   import { createCliDispatchPlugin } from "opencode-cli-dispatch"
-   export default createCliDispatchPlugin(undefined, { commandsDir: ".opencode/command" })
-   ```
-2. 或者手动把本仓库 `.opencode/command/cc.md`、`codex.md`、`opencode.md` 三个文件复制到目标项目的 `.opencode/command/` 下。
+```ts
+// other-project/.opencode/plugin/cli-dispatch.ts
+import { createCliDispatchPlugin } from "opencode-cli-dispatch"
+export default createCliDispatchPlugin()
+```
+
+如果你想要项目本地命令，再让 `commandsDir` 指向目标项目的命令目录：
+
+```ts
+// other-project/.opencode/plugin/cli-dispatch.ts
+import { createCliDispatchPlugin } from "opencode-cli-dispatch"
+export default createCliDispatchPlugin(undefined, { commandsDir: ".opencode/command" })
+```
 
 ### 方式二：本地插件文件（不安装包）
 
@@ -98,7 +108,7 @@ export default createCliDispatchPlugin()
 `createCliDispatchPlugin(configPath?, options?)` 支持两个可选参数：
 
 - `configPath` — 覆盖 delegate 配置的读取路径（见下文）。
-- `options.commandsDir` — 如果设置，每次插件加载时都会把 `/{name}` 和 `/opencode` 这些 slash 命令文件重新生成到该目录（默认使用已提交在 `.opencode/command/` 下的文件）。
+- `options.commandsDir` — 如果设置，每次插件加载时都会把 `/{name}` 和 `/opencode` 这些 slash 命令文件重新生成到该目录（默认写到 `~/.config/opencode/commands/`）。
 
 ### 方式三：一次性全局安装（所有项目通用）
 
@@ -116,18 +126,13 @@ OpenCode 会在启动时用 Bun 自动安装 npm/git 形式的插件依赖，缓
 
 如果以后发布到 npm 了，这一步可以简化成 `"plugin": ["opencode-cli-dispatch"]`。
 
-**2. slash 命令也需要装到全局。** OpenCode 会从 `~/.config/opencode/commands/` 读取 markdown 命令文件，对所有项目生效（[文档](https://opencode.ai/docs/commands/)）。把本仓库的 `.opencode/command/cc.md`、`codex.md`、`opencode.md` 复制过去：
-
-```bash
-mkdir -p ~/.config/opencode/commands
-cp .opencode/command/*.md ~/.config/opencode/commands/
-```
-
-（目前没有办法让通过 npm 安装的插件自动把 `createCliDispatchPlugin` 的 `commandsDir` 指向这个全局目录——它只会相对于调用时传入的路径生效。在这个能力补上之前，手动复制是最可靠的办法。）
+**2. slash 命令会自动写入全局。** 插件默认在每次加载时把生成的命令文件写到 `~/.config/opencode/commands/`，所以通常不需要手动复制。只有当你希望改成项目本地命令目录时，才需要用 `commandsDir` 选项。
 
 **3. 全局安装仍然需要各项目自己的 delegate 配置文件。** `cli-dispatch.config.json` 的查找路径（见[配置](#配置)一节）是相对于 `process.cwd()`，也就是你当前所在的项目，而不是 `~/.config/opencode/`。如果某个项目下没有配置文件，插件会退回到内置的 `claude` + `codex` 默认配置，大多数情况下这样就够用了。如果你想让所有项目都用自定义的 delegate/参数，要么在每个项目里各放一份 `cli-dispatch.config.json`，要么改用方式二（本地插件文件）从一个薄封装文件里显式传入绝对路径的 `configPath`，而不是走纯全局 npm 安装这条路。
 
 ## 配置
+
+> 本文档的最新英文版本在 [docs/configuration.md](docs/configuration.md)，以英文为准。
 
 delegate 的行为由 `cli-dispatch.config.json` 定义，按以下顺序解析（命中第一个即用）：
 
@@ -241,7 +246,7 @@ delegate 的行为由 `cli-dispatch.config.json` 定义，按以下顺序解析�
 
 ## 使用方法
 
-插件会按配置为每个 delegate 生成一个 slash 命令，命名为 `/<delegate-name>`（如 `/claude`、`/codex`）。本仓库中的 `/cc` 是 [.opencode/command/cc.md](.opencode/command/cc.md) 里手工维护的 `/claude` 别名，并非插件生成。**给自定义命令作者的提示**：手工维护的命令只有在 markdown frontmatter 中通过 `delegate: <name>` 声明了它所驱动的 delegate 时，才会被 verifiedModels 门禁覆盖（插件自动生成的命令都带有该声明）；缺少该声明时，门禁无法把命令与 delegate 关联起来。
+插件会按配置为每个 delegate 生成一个 slash 命令，命名为 `/<delegate-name>`（如 `/claude`、`/codex`）。当配置了 `claude` delegate 时，插件也会生成 `/cc` 作为 `/claude` 的别名；[.opencode/command/cc.md](.opencode/command/cc.md) 只是在无法写入插件生成命令的环境下的 fallback，不再是 `/cc` 的唯一来源。**给自定义命令作者的提示**：手工维护的命令只有在 markdown frontmatter 中通过 `delegate: <name>` 声明了它所驱动的 delegate 时，才会被 verifiedModels 门禁覆盖（插件自动生成的命令都带有该声明）；缺少该声明时，门禁无法把命令与 delegate 关联起来。
 
 - `/<delegate-name> <消息>` —— 启动（或继续）一个到该 delegate 的委托（如 `/claude <消息>`、`/codex <消息>`，或 `/cc` 别名）。
 - `/opencode` —— 退出该会话当前激活的委托，之后由 OpenCode 自己直接作答。
