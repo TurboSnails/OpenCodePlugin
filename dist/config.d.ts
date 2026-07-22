@@ -16,6 +16,7 @@ export declare function matchesVerifiedModel(model: {
     modelID: string;
 }, patterns: string[]): boolean;
 export declare function validateDelegates(delegates: Record<string, unknown>): string[];
+export declare function getConfigSearchPaths(configPath?: string, homeDir?: string, cwd?: string): string[];
 export declare function loadConfig(configPath?: string): CliDispatchConfig;
 export declare function resolveArgs(args: string[], vars: Record<string, string>): string[];
 //# sourceMappingURL=config.d.ts.map

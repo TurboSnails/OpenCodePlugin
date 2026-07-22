@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
+import { homedir } from "os";
 import { validateArgvInjection } from "./policy";
 // Each segment is one or more word/dot/hyphen characters, or a lone "*",
 // optionally ending in a trailing "*" wildcard (e.g. "anthropic", "*",
@@ -146,14 +147,18 @@ function validateConfig(config) {
     errors.push(...validateDelegates(obj.delegates));
     return errors;
 }
+export function getConfigSearchPaths(configPath, homeDir = homedir(), cwd = process.cwd()) {
+    if (configPath)
+        return [configPath];
+    return [
+        join(cwd, "cli-dispatch.config.json"),
+        join(cwd, ".opencode", "cli-dispatch.config.json"),
+        join(cwd, ".opencode", "lib", "cli-dispatch", "config.json"),
+        join(homeDir, ".config", "opencode", "cli-dispatch.config.json"),
+    ];
+}
 export function loadConfig(configPath) {
-    const searchPaths = configPath
-        ? [configPath]
-        : [
-            join(process.cwd(), "cli-dispatch.config.json"),
-            join(process.cwd(), ".opencode", "cli-dispatch.config.json"),
-            join(process.cwd(), ".opencode", "lib", "cli-dispatch", "config.json"),
-        ];
+    const searchPaths = getConfigSearchPaths(configPath);
     for (const path of searchPaths) {
         if (existsSync(path)) {
             try {

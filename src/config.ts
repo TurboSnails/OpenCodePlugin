@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "fs"
 import { join } from "path"
+import { homedir } from "os"
 import { validateArgvInjection } from "./policy"
 
 export type ParserName = "claude" | "codex" | "opencode" | "raw"
@@ -172,14 +173,22 @@ function validateConfig(config: unknown): string[] {
   return errors
 }
 
+export function getConfigSearchPaths(
+  configPath?: string,
+  homeDir: string = homedir(),
+  cwd: string = process.cwd(),
+): string[] {
+  if (configPath) return [configPath]
+  return [
+    join(cwd, "cli-dispatch.config.json"),
+    join(cwd, ".opencode", "cli-dispatch.config.json"),
+    join(cwd, ".opencode", "lib", "cli-dispatch", "config.json"),
+    join(homeDir, ".config", "opencode", "cli-dispatch.config.json"),
+  ]
+}
+
 export function loadConfig(configPath?: string): CliDispatchConfig {
-  const searchPaths = configPath
-    ? [configPath]
-    : [
-        join(process.cwd(), "cli-dispatch.config.json"),
-        join(process.cwd(), ".opencode", "cli-dispatch.config.json"),
-        join(process.cwd(), ".opencode", "lib", "cli-dispatch", "config.json"),
-      ]
+  const searchPaths = getConfigSearchPaths(configPath)
 
   for (const path of searchPaths) {
     if (existsSync(path)) {

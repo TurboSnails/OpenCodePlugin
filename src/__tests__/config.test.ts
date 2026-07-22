@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test"
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
-import { loadConfig, resolveArgs, validateDelegates, isValidVerifiedModelEntry, matchesVerifiedModel } from "../config"
+import { loadConfig, resolveArgs, validateDelegates, isValidVerifiedModelEntry, matchesVerifiedModel, getConfigSearchPaths } from "../config"
 import { loadAdapterConfig } from "../claude-code-adapter/config"
 
 const TEST_DIR = join(import.meta.dir, "__test_config__")
@@ -319,6 +319,20 @@ describe("loadConfig", () => {
     )
 
     expect(() => loadConfig(configPath)).toThrow(/verifiedModels/)
+  })
+
+  it("appends the global opencode config dir to the default search chain", () => {
+    const paths = getConfigSearchPaths(undefined, "/fake/home", "/fake/cwd")
+    expect(paths).toEqual([
+      "/fake/cwd/cli-dispatch.config.json",
+      "/fake/cwd/.opencode/cli-dispatch.config.json",
+      "/fake/cwd/.opencode/lib/cli-dispatch/config.json",
+      "/fake/home/.config/opencode/cli-dispatch.config.json",
+    ])
+  })
+
+  it("returns only the explicit configPath when given", () => {
+    expect(getConfigSearchPaths("/x/y.json", "/fake/home", "/fake/cwd")).toEqual(["/x/y.json"])
   })
 })
 
