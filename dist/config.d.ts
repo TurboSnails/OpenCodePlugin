@@ -15,6 +15,7 @@ export declare function matchesVerifiedModel(model: {
     providerID: string;
     modelID: string;
 }, patterns: string[]): boolean;
+export declare const DEFAULT_CONFIG: CliDispatchConfig;
 export declare function validateDelegates(delegates: Record<string, unknown>): string[];
 export declare function getConfigSearchPaths(configPath?: string, homeDir?: string, cwd?: string): string[];
 export declare function loadConfig(configPath?: string): CliDispatchConfig;

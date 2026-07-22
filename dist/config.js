@@ -28,7 +28,7 @@ export function matchesVerifiedModel(model, patterns) {
         return matchesSegment(model.providerID, provider) && matchesSegment(model.modelID, modelPattern);
     });
 }
-const DEFAULT_CONFIG = {
+export const DEFAULT_CONFIG = {
     delegates: {
         claude: {
             binary: "claude",

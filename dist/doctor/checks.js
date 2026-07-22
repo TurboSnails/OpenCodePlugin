@@ -1,11 +1,22 @@
 import { existsSync, readFileSync, readdirSync, accessSync, constants, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { join, delimiter } from "path";
 import { tmpdir } from "os";
-import { loadConfig, getConfigSearchPaths } from "../config";
+import { loadConfig, getConfigSearchPaths, DEFAULT_CONFIG } from "../config";
 import { checkDelegate } from "../health-check";
 import { generateCommands } from "../commands";
 export { makeContext } from "./context";
 const PKG = "opencode-cli-dispatch";
+function resolveConfigPath(ctx) {
+    if (ctx.configPath)
+        return ctx.configPath;
+    return getConfigSearchPaths(undefined, ctx.homeDir, ctx.cwd).find((p) => existsSync(p));
+}
+function loadConfigForContext(ctx) {
+    const path = resolveConfigPath(ctx);
+    if (!path)
+        return DEFAULT_CONFIG;
+    return loadConfig(path);
+}
 function checkPluginRegistered(ctx) {
     const candidates = [
         join(ctx.cwd, "opencode.json"),
@@ -43,10 +54,9 @@ function checkPluginRegistered(ctx) {
     };
 }
 function checkConfigFile(ctx) {
-    const paths = getConfigSearchPaths(ctx.configPath, ctx.homeDir, ctx.cwd);
-    const found = paths.find((p) => existsSync(p));
+    const found = resolveConfigPath(ctx);
     try {
-        const config = loadConfig(found);
+        const config = loadConfigForContext(ctx);
         if (!found) {
             return {
                 result: { id: "config-file", label: "Config file", ok: true, detail: "no config file found; using built-in defaults" },
@@ -180,34 +190,33 @@ function checkSlashCommands(config, ctx) {
 export async function runChecks(ctx, run) {
     const results = [];
     let config = { delegates: {} };
-    const safe = async (fn) => {
+    const safe = async (id, label, fn) => {
         try {
             return await fn();
         }
         catch (err) {
             return {
-                id: "internal-error",
-                label: "Internal check error",
+                id,
+                label,
                 ok: false,
                 detail: err instanceof Error ? err.message : String(err),
             };
         }
     };
-    results.push(await safe(() => checkPluginRegistered(ctx)));
-    const configOutcome = await safe(() => checkConfigFile(ctx).result);
+    results.push(await safe("plugin-registered", "Plugin registered", () => checkPluginRegistered(ctx)));
+    const configOutcome = await safe("config-file", "Config file", () => checkConfigFile(ctx).result);
     // config 需要在 safe 外提取以便后续检查使用
-    const found = getConfigSearchPaths(ctx.configPath, ctx.homeDir, ctx.cwd).find((p) => existsSync(p));
     try {
-        config = loadConfig(found);
+        config = loadConfigForContext(ctx);
     }
     catch {
         config = { delegates: {} };
     }
     results.push(configOutcome);
-    results.push(await safe(() => checkBinaries(config, ctx)));
-    results.push(await safe(() => checkAuthenticated(config, ctx)));
-    results.push(await safe(() => checkWritability(config, run)));
-    results.push(await safe(() => checkSlashCommands(config, ctx)));
+    results.push(await safe("delegate-binaries", "Delegate binaries", () => checkBinaries(config, ctx)));
+    results.push(await safe("cli-authenticated", "CLI authentication", () => checkAuthenticated(config, ctx)));
+    results.push(await safe("writability-probe", "Writability probe", () => checkWritability(config, run)));
+    results.push(await safe("slash-commands", "Slash commands", () => checkSlashCommands(config, ctx)));
     return results;
 }
 export function applyFixes(results, ctx) {
@@ -216,7 +225,7 @@ export function applyFixes(results, ctx) {
             return r;
         if (r.id === "slash-commands") {
             try {
-                const config = loadConfig(ctx.configPath);
+                const config = loadConfigForContext(ctx);
                 generateCommands(config, globalCommandsDir(ctx));
                 return { ...r, ok: true, detail: `regenerated into ${globalCommandsDir(ctx)}` };
             }

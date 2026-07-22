@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test"
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync } from "fs"
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
-import { makeContext, runChecks } from "../doctor/checks"
-import type { DoctorContext } from "../doctor/checks"
+import { makeContext, runChecks, applyFixes } from "../doctor/checks"
+import type { DoctorContext, CheckResult } from "../doctor/checks"
 
 let root: string
 let home: string
@@ -43,6 +43,26 @@ function writeFakeBinary(dir: string, name: string): void {
 
 function byId(results: { id: string }[], id: string) {
   return results.find((r) => r.id === id)!
+}
+
+function failedResult(id: string, label: string): CheckResult {
+  return { id, label, ok: false, detail: "missing" }
+}
+
+function configFileWithClaudeOnly(path: string): void {
+  writeFileSync(
+    path,
+    JSON.stringify({
+      delegates: {
+        claude: {
+          binary: "claude",
+          parser: "claude",
+          startArgs: ["-p", "--", "{prompt}"],
+          replyArgs: ["-p", "--resume", "{externalId}", "--", "{prompt}"],
+        },
+      },
+    }),
+  )
 }
 
 describe("runChecks", () => {
@@ -125,5 +145,49 @@ describe("runChecks", () => {
       "writability-probe",
       "slash-commands",
     ])
+  })
+
+  it("preserves the check id and label when a check throws", async () => {
+    mkdirSync(join(cwd, "opencode.json"), { recursive: true })
+    const results = await run(ctx())
+    const check = byId(results, "plugin-registered")
+    expect(check.id).toBe("plugin-registered")
+    expect(check.label).toBe("Plugin registered")
+    expect(check.ok).toBe(false)
+    expect(check.detail.toLowerCase()).toContain("directory")
+  })
+})
+
+describe("applyFixes", () => {
+  it("regenerates slash commands into the global commands dir", () => {
+    const configPath = join(cwd, "cli-dispatch.config.json")
+    configFileWithClaudeOnly(configPath)
+    const results = applyFixes([failedResult("slash-commands", "Slash commands")], ctx())
+    const fixed = byId(results, "slash-commands")
+    expect(fixed.ok).toBe(true)
+    expect(fixed.detail).toContain("regenerated")
+    expect(existsSync(join(home, ".config", "opencode", "commands", "claude.md"))).toBe(true)
+    expect(existsSync(join(home, ".config", "opencode", "commands", "opencode.md"))).toBe(true)
+  })
+
+  it("patches an existing opencode.json to add the plugin", () => {
+    writeFileSync(join(cwd, "opencode.json"), JSON.stringify({ plugin: [] }))
+    const results = applyFixes([failedResult("plugin-registered", "Plugin registered")], ctx())
+    const fixed = byId(results, "plugin-registered")
+    expect(fixed.ok).toBe(true)
+    expect(fixed.detail).toContain("opencode-cli-dispatch")
+    const updated = JSON.parse(readFileSync(join(cwd, "opencode.json"), "utf-8"))
+    expect(updated.plugin).toContain("opencode-cli-dispatch")
+  })
+
+  it("leaves passing results unchanged", () => {
+    const passing: CheckResult = {
+      id: "delegate-binaries",
+      label: "Delegate binaries",
+      ok: true,
+      detail: "all found",
+    }
+    const results = applyFixes([passing], ctx())
+    expect(byId(results, "delegate-binaries")).toEqual(passing)
   })
 })

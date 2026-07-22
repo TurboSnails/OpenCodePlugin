@@ -2,9 +2,12 @@ import { existsSync, readFileSync, readdirSync, accessSync, constants, mkdtempSy
 import { join, delimiter } from "path"
 import { tmpdir } from "os"
 import type { CliDispatchConfig } from "../config"
-import { loadConfig, getConfigSearchPaths } from "../config"
+import { loadConfig, getConfigSearchPaths, DEFAULT_CONFIG } from "../config"
 import { checkDelegate, type RunDelegateFn } from "../health-check"
 import { generateCommands } from "../commands"
+import { makeContext, type DoctorContext } from "./context"
+
+export { makeContext, type DoctorContext } from "./context"
 
 export interface CheckResult {
   id: string
@@ -14,11 +17,18 @@ export interface CheckResult {
   fixHint?: string
 }
 
-export type { DoctorContext } from "./context"
-export { makeContext } from "./context"
-import type { DoctorContext } from "./context"
-
 const PKG = "opencode-cli-dispatch"
+
+function resolveConfigPath(ctx: DoctorContext): string | undefined {
+  if (ctx.configPath) return ctx.configPath
+  return getConfigSearchPaths(undefined, ctx.homeDir, ctx.cwd).find((p) => existsSync(p))
+}
+
+function loadConfigForContext(ctx: DoctorContext): CliDispatchConfig {
+  const path = resolveConfigPath(ctx)
+  if (!path) return DEFAULT_CONFIG
+  return loadConfig(path)
+}
 
 function checkPluginRegistered(ctx: DoctorContext): CheckResult {
   const candidates = [
@@ -57,10 +67,9 @@ function checkPluginRegistered(ctx: DoctorContext): CheckResult {
 }
 
 function checkConfigFile(ctx: DoctorContext): { result: CheckResult; config: CliDispatchConfig } {
-  const paths = getConfigSearchPaths(ctx.configPath, ctx.homeDir, ctx.cwd)
-  const found = paths.find((p) => existsSync(p))
+  const found = resolveConfigPath(ctx)
   try {
-    const config = loadConfig(found)
+    const config = loadConfigForContext(ctx)
     if (!found) {
       return {
         result: { id: "config-file", label: "Config file", ok: true, detail: "no config file found; using built-in defaults" },
@@ -195,35 +204,38 @@ export async function runChecks(ctx: DoctorContext, run: RunDelegateFn): Promise
   const results: CheckResult[] = []
   let config: CliDispatchConfig = { delegates: {} }
 
-  const safe = async (fn: () => CheckResult | Promise<CheckResult>): Promise<CheckResult> => {
+  const safe = async (
+    id: string,
+    label: string,
+    fn: () => CheckResult | Promise<CheckResult>,
+  ): Promise<CheckResult> => {
     try {
       return await fn()
     } catch (err) {
       return {
-        id: "internal-error",
-        label: "Internal check error",
+        id,
+        label,
         ok: false,
         detail: err instanceof Error ? err.message : String(err),
       }
     }
   }
 
-  results.push(await safe(() => checkPluginRegistered(ctx)))
+  results.push(await safe("plugin-registered", "Plugin registered", () => checkPluginRegistered(ctx)))
 
-  const configOutcome = await safe(() => checkConfigFile(ctx).result)
+  const configOutcome = await safe("config-file", "Config file", () => checkConfigFile(ctx).result)
   // config 需要在 safe 外提取以便后续检查使用
-  const found = getConfigSearchPaths(ctx.configPath, ctx.homeDir, ctx.cwd).find((p) => existsSync(p))
   try {
-    config = loadConfig(found)
+    config = loadConfigForContext(ctx)
   } catch {
     config = { delegates: {} }
   }
   results.push(configOutcome)
 
-  results.push(await safe(() => checkBinaries(config, ctx)))
-  results.push(await safe(() => checkAuthenticated(config, ctx)))
-  results.push(await safe(() => checkWritability(config, run)))
-  results.push(await safe(() => checkSlashCommands(config, ctx)))
+  results.push(await safe("delegate-binaries", "Delegate binaries", () => checkBinaries(config, ctx)))
+  results.push(await safe("cli-authenticated", "CLI authentication", () => checkAuthenticated(config, ctx)))
+  results.push(await safe("writability-probe", "Writability probe", () => checkWritability(config, run)))
+  results.push(await safe("slash-commands", "Slash commands", () => checkSlashCommands(config, ctx)))
 
   return results
 }
@@ -233,7 +245,7 @@ export function applyFixes(results: CheckResult[], ctx: DoctorContext): CheckRes
     if (r.ok) return r
     if (r.id === "slash-commands") {
       try {
-        const config = loadConfig(ctx.configPath)
+        const config = loadConfigForContext(ctx)
         generateCommands(config, globalCommandsDir(ctx))
         return { ...r, ok: true, detail: `regenerated into ${globalCommandsDir(ctx)}` }
       } catch (err) {

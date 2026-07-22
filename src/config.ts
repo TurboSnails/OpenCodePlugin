@@ -44,7 +44,7 @@ export function matchesVerifiedModel(model: { providerID: string; modelID: strin
   })
 }
 
-const DEFAULT_CONFIG: CliDispatchConfig = {
+export const DEFAULT_CONFIG: CliDispatchConfig = {
   delegates: {
     claude: {
       binary: "claude",
