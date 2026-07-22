@@ -1,6 +1,6 @@
 import type { DelegateConfig } from "../config";
-import { runDelegate } from "../run-delegate";
-export type RunDelegateFn = typeof runDelegate;
+import { type RunDelegateFn } from "../delegate-turn";
+export type { RunDelegateFn } from "../delegate-turn";
 export type DelegateRunOptions = {
     run?: RunDelegateFn;
     cwd?: string;
