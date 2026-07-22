@@ -1,7 +1,7 @@
 import { getActiveDelegate, clearActiveDelegate, setSessionAgent, setSessionModel, getSessionModel } from "./session-store";
 import { buildRoutingRule } from "./routing-rule";
 import { matchesVerifiedModel } from "./config";
-import { GENERATED_MARKER } from "./commands";
+import { GENERATED_MARKER } from "./policy";
 export function makeSystemTransform() {
     return async (input, output) => {
         const active = input.sessionID ? getActiveDelegate(input.sessionID) : undefined;

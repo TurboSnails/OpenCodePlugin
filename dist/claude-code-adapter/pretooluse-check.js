@@ -1,4 +1,4 @@
-import { GENERATED_MARKER } from "../commands";
+import { GENERATED_MARKER } from "../policy";
 // The MCP server name from .mcp.json; Claude Code names MCP tools
 // `mcp__<server>__<tool>` in hook payloads (design.md D3).
 export const MCP_SERVER_NAME = "cli-dispatch";

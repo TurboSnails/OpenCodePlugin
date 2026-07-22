@@ -1,4 +1,4 @@
-import { GENERATED_MARKER } from "../commands"
+import { GENERATED_MARKER } from "../policy"
 import type { ClaudeCodeAdapterConfig } from "./config"
 
 // The MCP server name from .mcp.json; Claude Code names MCP tools

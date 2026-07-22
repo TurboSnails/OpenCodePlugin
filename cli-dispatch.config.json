@@ -43,12 +43,12 @@
       "replyArgs": [
         "exec",
         "resume",
-        "{externalId}",
         "--json",
         "-c",
         "sandbox_mode=workspace-write",
         "--skip-git-repo-check",
         "--",
+        "{externalId}",
         "{prompt}"
       ]
     }

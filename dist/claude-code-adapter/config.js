@@ -25,20 +25,20 @@ const DEFAULT_CONFIG = {
             replyArgs: [
                 "exec",
                 "resume",
-                "{externalId}",
                 "--json",
                 "-c",
                 "sandbox_mode=workspace-write",
                 "--skip-git-repo-check",
                 "--",
+                "{externalId}",
                 "{prompt}",
             ],
         },
         opencode: {
             binary: "opencode",
             parser: "opencode",
-            startArgs: ["run", "--format", "json", "{prompt}"],
-            replyArgs: ["run", "--format", "json", "-s", "{externalId}", "-c", "{prompt}"],
+            startArgs: ["run", "--format", "json", "--", "{prompt}"],
+            replyArgs: ["run", "--format", "json", "-s", "{externalId}", "-c", "--", "{prompt}"],
         },
     },
 };

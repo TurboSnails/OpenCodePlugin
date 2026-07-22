@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test"
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs"
 import { join } from "path"
-import { loadConfig, resolveArgs, isValidVerifiedModelEntry, matchesVerifiedModel } from "../config"
+import { tmpdir } from "os"
+import { loadConfig, resolveArgs, validateDelegates, isValidVerifiedModelEntry, matchesVerifiedModel } from "../config"
+import { loadAdapterConfig } from "../claude-code-adapter/config"
 
 const TEST_DIR = join(import.meta.dir, "__test_config__")
 
@@ -377,6 +379,41 @@ describe("matchesVerifiedModel", () => {
 
   it("returns false for an empty pattern list", () => {
     expect(matchesVerifiedModel(model, [])).toBe(false)
+  })
+})
+
+describe("argv injection validation", () => {
+  it("rejects startArgs with {prompt} but no preceding --", () => {
+    const errors = validateDelegates({
+      bad: {
+        binary: "bad",
+        parser: "raw",
+        startArgs: ["-p", "{prompt}"],
+        replyArgs: ["--resume", "{externalId}", "--", "{prompt}"],
+      },
+    })
+    expect(errors.some((e) => e.includes('"startArgs"') && e.includes('"--"'))).toBe(true)
+  })
+
+  it("rejects replyArgs with a bare positional {externalId}", () => {
+    const errors = validateDelegates({
+      bad: {
+        binary: "bad",
+        parser: "raw",
+        startArgs: ["--", "{prompt}"],
+        replyArgs: ["resume", "{externalId}", "--", "{prompt}"],
+      },
+    })
+    expect(errors.some((e) => e.includes("{externalId}"))).toBe(true)
+  })
+
+  it("accepts the built-in defaults from both hosts", () => {
+    // Missing path -> built-in defaults; both must satisfy the injection rule.
+    const missing = join(tmpdir(), `cli-dispatch-missing-${process.pid}.json`)
+    const oc = loadConfig(missing)
+    expect(validateDelegates(oc.delegates)).toEqual([])
+    const cc = loadAdapterConfig(join(tmpdir(), `cli-dispatch-missing-cc-${process.pid}.json`))
+    expect(validateDelegates(cc.delegates)).toEqual([])
   })
 })
 

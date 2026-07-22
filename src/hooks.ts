@@ -1,7 +1,7 @@
 import { getActiveDelegate, clearActiveDelegate, setSessionAgent, setSessionModel, getSessionModel } from "./session-store"
 import { buildRoutingRule } from "./routing-rule"
 import { matchesVerifiedModel, type CliDispatchConfig } from "./config"
-import { GENERATED_MARKER } from "./commands"
+import { GENERATED_MARKER } from "./policy"
 
 type SystemTransformInput = { sessionID?: string }
 type SystemTransformOutput = { system: string[] }

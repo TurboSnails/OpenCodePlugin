@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "fs"
 import { join } from "path"
+import { validateArgvInjection } from "./policy"
 
 export type ParserName = "claude" | "codex" | "opencode" | "raw"
 
@@ -79,12 +80,12 @@ const DEFAULT_CONFIG: CliDispatchConfig = {
       replyArgs: [
         "exec",
         "resume",
-        "{externalId}",
         "--json",
         "-c",
         "sandbox_mode=workspace-write",
         "--skip-git-repo-check",
         "--",
+        "{externalId}",
         "{prompt}",
       ],
     },
@@ -114,16 +115,24 @@ export function validateDelegates(delegates: Record<string, unknown>): string[] 
 
     if (!Array.isArray(d.startArgs) || !d.startArgs.every((a) => typeof a === "string")) {
       errors.push(`delegate "${name}": "startArgs" must be an array of strings`)
-    } else if (!d.startArgs.some((a) => a.includes("{prompt}"))) {
-      errors.push(`delegate "${name}": "startArgs" must contain the {prompt} placeholder, otherwise the CLI runs without the user's task`)
+    } else {
+      if (!d.startArgs.some((a) => a.includes("{prompt}"))) {
+        errors.push(`delegate "${name}": "startArgs" must contain the {prompt} placeholder, otherwise the CLI runs without the user's task`)
+      }
+      const argvError = validateArgvInjection(name, "startArgs", d.startArgs as string[])
+      if (argvError) errors.push(argvError)
     }
 
     if (!Array.isArray(d.replyArgs) || !d.replyArgs.every((a) => typeof a === "string")) {
       errors.push(`delegate "${name}": "replyArgs" must be an array of strings`)
-    } else if (!d.replyArgs.some((a) => a.includes("{externalId}"))) {
-      // Warning only: a raw delegate without any session concept may
-      // legitimately have nothing to resume.
-      console.warn(`[cli-dispatch] delegate "${name}": "replyArgs" has no {externalId} placeholder; ${name}_reply will not be able to resume a session`)
+    } else {
+      if (!d.replyArgs.some((a) => a.includes("{externalId}"))) {
+        // Warning only: a raw delegate without any session concept may
+        // legitimately have nothing to resume.
+        console.warn(`[cli-dispatch] delegate "${name}": "replyArgs" has no {externalId} placeholder; ${name}_reply will not be able to resume a session`)
+      }
+      const argvError = validateArgvInjection(name, "replyArgs", d.replyArgs as string[])
+      if (argvError) errors.push(argvError)
     }
 
     if (d.timeoutMs !== undefined && (typeof d.timeoutMs !== "number" || !(d.timeoutMs > 0))) {

@@ -52,7 +52,7 @@ describe("loadAdapterConfig", () => {
         binary: "codex",
         parser: "codex",
         startArgs: ["exec", "--", "{prompt}"],
-        replyArgs: ["exec", "resume", "{externalId}", "--", "{prompt}"],
+        replyArgs: ["exec", "resume", "--", "{externalId}", "{prompt}"],
       },
     },
     verifiedModels: ["claude-*"],
