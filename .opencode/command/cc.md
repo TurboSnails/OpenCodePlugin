@@ -1,5 +1,6 @@
 ---
 description: Delegate this conversation to the claude (Claude Code) CLI (sticky - follow-ups keep going to claude until another /codex or /cc command is used)
+delegate: claude
 ---
 
 Delegate this conversation to the claude CLI (Claude Code).

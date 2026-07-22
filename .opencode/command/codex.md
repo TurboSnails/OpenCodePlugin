@@ -1,5 +1,6 @@
 ---
 description: Delegate this conversation to the codex CLI (sticky - follow-ups keep going to codex until another /codex or /cc command is used)
+delegate: codex
 ---
 
 Delegate this conversation to the codex CLI.

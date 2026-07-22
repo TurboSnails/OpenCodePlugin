@@ -242,7 +242,7 @@ The plugin generates one slash command per configured delegate, named `/<delegat
 - `/<delegate-name> <message>` — start (or continue) a delegation to that delegate (e.g. `/claude <message>`, `/codex <message>`, or the `/cc` alias).
 - `/opencode` — exit the active delegation for this session; OpenCode answers directly again.
 
-While a delegation is active, **all** subsequent input in that session — plain messages, other slash commands, `@agent` mentions — is forwarded to the active delegate as prompt text, until `/opencode` is run. If a delegate call fails, the error is returned in-chat as a reminder to run `/opencode`; the delegation itself stays active so you can retry or fix the underlying issue.
+While a delegation is active, subsequent input in that session — plain messages, other slash commands, `@agent` mentions — is forwarded to the active delegate as prompt text on a **best-effort** basis, until `/opencode` is run. This relies on the model calling the delegate's reply tool; a model that answers directly instead is outside the plugin's control (see [Known limitations](#known-limitations)). If a delegate call fails, the error is returned in-chat as a reminder to run `/opencode`; the delegation itself stays active so you can retry or fix the underlying issue.
 
 ### Timeout and cancellation
 
