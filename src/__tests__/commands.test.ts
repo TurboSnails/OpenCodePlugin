@@ -65,6 +65,15 @@ describe("generateCommands", () => {
     expect(existsSync(join(dir, "opencode.md"))).toBe(true)
   })
 
+  it("declares the target delegate structurally in frontmatter", () => {
+    generateCommands(configWith("claude"), dir)
+
+    const claude = readFileSync(join(dir, "claude.md"), "utf-8")
+    expect(claude).toMatch(/^---\n[\s\S]*?\ndelegate: claude\n[\s\S]*?---/)
+    const opencode = readFileSync(join(dir, "opencode.md"), "utf-8")
+    expect(opencode).not.toContain("delegate:")
+  })
+
   it("never deletes a command file without the generated marker", () => {
     writeFileSync(join(dir, "cc.md"), "manually maintained alias\n", "utf-8")
 

@@ -5,6 +5,7 @@ import { GENERATED_MARKER } from "./policy";
 export { GENERATED_MARKER };
 const DELEGATE_COMMAND_TEMPLATE = `---
 description: Delegate this conversation to the {{NAME}} CLI (sticky - follow-ups keep going to {{NAME}} {{UNTIL}})
+delegate: {{NAME}}
 ---
 
 ${GENERATED_MARKER}

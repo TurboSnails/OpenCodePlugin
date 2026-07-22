@@ -46,14 +46,18 @@ export function makeChatMessage() {
 type CommandBeforeInput = { command: string; sessionID: string }
 type CommandBeforeOutput = { parts: Array<{ type: string; text?: string; synthetic?: boolean }> }
 
-// The queued command text (generated or hand-maintained) always instructs the
-// model to call `{name}_start` verbatim, regardless of what the slash command
-// itself is named (e.g. this repo's `/cc` targets the `claude` delegate but
-// isn't named `claude`) — so the delegate is detected from that text, not
-// from `input.command`.
+// Generated delegate commands declare their target structurally in
+// frontmatter (`delegate: <name>`), so detection is a parse of that
+// declaration — not a substring match for `{name}_start`, which any
+// hand-written text could trip (design D6). The slash command's own name is
+// not authoritative (this repo's `/cc` targets the `claude` delegate).
 function detectTargetedDelegate(parts: CommandBeforeOutput["parts"], delegateNames: string[]): string | undefined {
   const text = parts.map((p) => p.text ?? "").join("\n")
-  return delegateNames.find((name) => text.includes(`${name}_start`))
+  const frontmatter = text.match(/^---\n([\s\S]*?)\n---/)
+  if (!frontmatter) return undefined
+  const declaration = frontmatter[1].match(/^delegate:\s*([\w-]+)\s*$/m)
+  if (!declaration) return undefined
+  return delegateNames.includes(declaration[1]) ? declaration[1] : undefined
 }
 
 export function makeCommandBefore(config: CliDispatchConfig) {
