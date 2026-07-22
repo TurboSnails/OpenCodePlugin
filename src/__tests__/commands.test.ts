@@ -81,4 +81,35 @@ describe("generateCommands", () => {
 
     expect(readFileSync(join(dir, "cc.md"), "utf-8")).toBe("manually maintained alias\n")
   })
+
+  it("is idempotent: a second run leaves file contents and mtimes unchanged", async () => {
+    generateCommands(configWith("claude"), dir)
+    const first = readFileSync(join(dir, "claude.md"), "utf-8")
+    const stat1 = (await import("fs")).statSync(join(dir, "claude.md")).mtimeMs
+    await new Promise((r) => setTimeout(r, 20))
+    generateCommands(configWith("claude"), dir)
+    const stat2 = (await import("fs")).statSync(join(dir, "claude.md")).mtimeMs
+    expect(readFileSync(join(dir, "claude.md"), "utf-8")).toBe(first)
+    expect(stat2).toBe(stat1)
+  })
+
+  it("generates a cc.md alias when a claude delegate is configured", () => {
+    generateCommands(configWith("claude"), dir)
+    const cc = readFileSync(join(dir, "cc.md"), "utf-8")
+    expect(cc).toContain("delegate: claude")
+    expect(cc).toContain("Alias")
+  })
+
+  it("never overwrites a hand-maintained cc.md (no generated marker)", () => {
+    writeFileSync(join(dir, "cc.md"), "# my custom cc command\n")
+    generateCommands(configWith("claude"), dir)
+    expect(readFileSync(join(dir, "cc.md"), "utf-8")).toBe("# my custom cc command\n")
+  })
+
+  it("removes a stale generated cc.md when claude is no longer configured", () => {
+    generateCommands(configWith("claude"), dir)
+    expect(existsSync(join(dir, "cc.md"))).toBe(true)
+    generateCommands(configWith("codex"), dir)
+    expect(existsSync(join(dir, "cc.md"))).toBe(false)
+  })
 })

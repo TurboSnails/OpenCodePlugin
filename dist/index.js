@@ -1,3 +1,5 @@
+import { homedir } from "os";
+import { join } from "path";
 import { tool } from "@opencode-ai/plugin";
 import { loadConfig } from "./config";
 import { makeStartTool, makeReplyTool } from "./delegate-tools";
@@ -21,8 +23,13 @@ export function createCliDispatchPlugin(configPath, options) {
         let config;
         try {
             config = loadConfig(configPath);
-            if (options?.commandsDir) {
-                generateCommands(config, options.commandsDir);
+            const commandsDir = options?.commandsDir ?? join(homedir(), ".config", "opencode", "commands");
+            try {
+                generateCommands(config, commandsDir);
+            }
+            catch (err) {
+                console.warn(`[cli-dispatch] could not write slash commands to ${commandsDir}: ${err instanceof Error ? err.message : String(err)}. ` +
+                    `Run "cli-dispatch doctor" later to diagnose.`);
             }
             // Generate tools dynamically from config
             tools = {

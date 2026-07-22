@@ -41,6 +41,18 @@ function generateDelegateCommand(name: string, otherNames: string[]): string {
   return DELEGATE_COMMAND_TEMPLATE.replaceAll("{{NAME}}", name).replaceAll("{{UNTIL}}", until)
 }
 
+function writeIfChanged(path: string, content: string): void {
+  if (existsSync(path) && readFileSync(path, "utf-8") === content) return
+  writeFileSync(path, content, "utf-8")
+}
+
+function generateCcAlias(name: string, otherNames: string[]): string {
+  return generateDelegateCommand(name, otherNames).replace(
+    /^description: .*$/m,
+    `description: Alias for /${name} — delegate this conversation to the ${name} CLI (sticky)`,
+  )
+}
+
 export function generateCommands(config: CliDispatchConfig, outputDir: string): void {
   if (!existsSync(outputDir)) {
     mkdirSync(outputDir, { recursive: true })
@@ -51,16 +63,26 @@ export function generateCommands(config: CliDispatchConfig, outputDir: string): 
   // Generate delegate commands
   for (const name of names) {
     const content = generateDelegateCommand(name, names.filter((n) => n !== name))
-    writeFileSync(join(outputDir, `${name}.md`), content, "utf-8")
+    writeIfChanged(join(outputDir, `${name}.md`), content)
   }
 
   // Generate /opencode command (always needed)
-  writeFileSync(join(outputDir, "opencode.md"), OPENCODE_COMMAND_TEMPLATE, "utf-8")
+  writeIfChanged(join(outputDir, "opencode.md"), OPENCODE_COMMAND_TEMPLATE)
+
+  // Generate /cc alias for claude; never clobber a hand-maintained file
+  const ccPath = join(outputDir, "cc.md")
+  if (names.includes("claude")) {
+    const alias = generateCcAlias("claude", names.filter((n) => n !== "claude"))
+    if (!existsSync(ccPath) || readFileSync(ccPath, "utf-8").includes(GENERATED_MARKER)) {
+      writeIfChanged(ccPath, alias)
+    }
+  }
 
   // Remove command files we generated for delegates that are no longer
   // configured. Only files carrying the generated marker are eligible;
   // hand-maintained files (no marker) are never touched.
   const current = new Set([...names.map((n) => `${n}.md`), "opencode.md"])
+  if (names.includes("claude")) current.add("cc.md")
   for (const file of readdirSync(outputDir)) {
     if (!file.endsWith(".md") || current.has(file)) continue
     const path = join(outputDir, file)
