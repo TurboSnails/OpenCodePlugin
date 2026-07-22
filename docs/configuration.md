@@ -2,12 +2,14 @@
 
 Delegate behavior is defined in `cli-dispatch.config.json`, resolved (first match wins) from:
 
-1. the `configPath` passed to `createCliDispatchPlugin`, if any
-2. `./cli-dispatch.config.json`
-3. `./.opencode/cli-dispatch.config.json`
-4. `./.opencode/lib/cli-dispatch/config.json`
-5. `~/.config/opencode/cli-dispatch.config.json`
-6. a built-in default (the `claude` + `codex` presets shown below) if none of the above exist
+If `configPath` is passed to `createCliDispatchPlugin()`, that path is used exclusively.
+Otherwise, the plugin checks in order:
+
+1. `./cli-dispatch.config.json`
+2. `./.opencode/cli-dispatch.config.json`
+3. `./.opencode/lib/cli-dispatch/config.json`
+4. `~/.config/opencode/cli-dispatch.config.json`
+5. a built-in default (the `claude` + `codex` presets shown below) if none of the above exist
 
 ```json
 {
