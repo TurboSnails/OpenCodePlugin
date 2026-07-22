@@ -714,7 +714,7 @@ Expected: PASS
 
 ```bash
 bun run build
-node dist/doctor/cli.js; echo "exit=$?"   # 预期 exit=1（裸环境部分检查不过），输出含 ✓/✗ 行
+bun dist/doctor/cli.js; echo "exit=$?"   # 预期 exit=1（裸环境部分检查不过），输出含 ✓/✗ 行
 git add src/doctor/ src/__tests__/doctor-cli.test.ts package.json dist/
 git commit -m "feat: add cli-dispatch doctor CLI with --fix (A2)"
 ```

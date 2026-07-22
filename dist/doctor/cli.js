@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { runChecks, applyFixes } from "./checks";
 import { makeContext } from "./context";
 import { formatResults } from "./format";
