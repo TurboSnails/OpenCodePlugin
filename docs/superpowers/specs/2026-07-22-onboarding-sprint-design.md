@@ -44,10 +44,10 @@ README Configuration 一节同步更新查找链。
 
 | # | 检查项 | 失败时输出 |
 |---|---|---|
-| 1 | 插件已注册：项目级 + 全局级 `opencode.json(c)` 任一处声明 | 给出要添加的 JSON 片段 |
+| 1 | 插件已注册（两种声明方式任一）：① 项目级或全局级 `opencode.json(c)` 的 `plugin` 数组含本包；② `.opencode/plugin/` 或 `~/.config/opencode/plugins/` 下存在引用本包的 wrapper 文件 | 给出要添加的 JSON 片段或 wrapper 模板 |
 | 2 | 配置文件：查找链上第一个 config 校验通过；未找到则提示用内置默认 | 逐条校验错误 + 文件路径（复用 validateConfig） |
 | 3 | delegate 二进制在 PATH（`claude`/`codex`） | 安装命令 |
-| 4 | CLI 已登录：`~/.claude` 凭证 / codex auth 文件存在（不调 API） | 提示交互登录一次 |
+| 4 | CLI 已登录：`~/.claude/` 下凭证存在 / `~/.codex/auth.json` 存在（只查文件，不调 API） | 提示交互登录一次 |
 | 5 | 可写性探针：temp 目录 spawn delegate（复用 health-check） | 指向配置文档权限段落 |
 | 6 | slash commands 在 `~/.config/opencode/commands/` 且为最新 | `--fix` 自动重新生成 |
 
