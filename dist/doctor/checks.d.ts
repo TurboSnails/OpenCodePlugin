@@ -8,6 +8,7 @@ export interface CheckResult {
     detail: string;
     fixHint?: string;
 }
+export declare function which(binary: string, pathEnv: string): boolean;
 export declare function runChecks(ctx: DoctorContext, run: RunDelegateFn): Promise<CheckResult[]>;
 export declare function applyFixes(results: CheckResult[], ctx: DoctorContext): CheckResult[];
 //# sourceMappingURL=checks.d.ts.map

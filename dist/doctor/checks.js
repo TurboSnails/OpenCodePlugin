@@ -82,25 +82,30 @@ function checkConfigFile(ctx) {
         };
     }
 }
-function which(binary, pathEnv) {
+function execAccessFlag() {
+    return process.platform === "win32" ? constants.F_OK : constants.X_OK;
+}
+export function which(binary, pathEnv) {
+    const flag = execAccessFlag();
+    const isWin = process.platform === "win32";
     if (isAbsolute(binary)) {
         if (!existsSync(binary))
             return false;
         try {
-            accessSync(binary, constants.X_OK);
+            accessSync(binary, flag);
             return true;
         }
         catch {
             return false;
         }
     }
-    const names = process.platform === "win32" ? [binary, `${binary}.exe`] : [binary];
+    const names = isWin ? [binary, `${binary}.exe`, `${binary}.cmd`, `${binary}.bat`] : [binary];
     for (const name of names) {
         for (const dir of pathEnv.split(delimiter)) {
             if (!dir)
                 continue;
             try {
-                accessSync(join(dir, name), constants.X_OK);
+                accessSync(join(dir, name), flag);
                 return true;
             }
             catch {
@@ -241,6 +246,13 @@ export async function runChecks(ctx, run) {
     results.push(await safe("slash-commands", "Slash commands", () => checkSlashCommands(config, ctx)));
     return results;
 }
+function stripJsoncComments(text) {
+    // Remove single-line comments that are not inside strings.
+    const withoutLineComments = text.replace(/(^|[^:"'])(\/\/[^\r\n]*)/g, "$1");
+    // Remove multi-line comments.
+    const withoutBlockComments = withoutLineComments.replace(/\/\*[\s\S]*?\*\//g, "");
+    return withoutBlockComments;
+}
 export function applyFixes(results, ctx) {
     return results.map((r) => {
         if (r.ok)
@@ -271,15 +283,22 @@ export function applyFixes(results, ctx) {
                         if (text.includes(PKG)) {
                             return { ...r, ok: true, detail: `plugin already declared in ${path}` };
                         }
-                        const pluginMatch = text.match(/"plugin"\s*:\s*\[([\s\S]*?)\]/);
-                        if (!pluginMatch)
-                            continue;
-                        const fullMatch = pluginMatch[0];
-                        const arrayContent = pluginMatch[1];
-                        const closeIndex = fullMatch.lastIndexOf("]");
-                        const separator = arrayContent.trim().length > 0 ? ", " : "";
-                        const replacement = `${fullMatch.slice(0, closeIndex)}${separator}"${PKG}"${fullMatch.slice(closeIndex)}`;
-                        writeFileSync(path, text.replace(fullMatch, replacement), "utf-8");
+                        const stripped = stripJsoncComments(text);
+                        let obj;
+                        try {
+                            obj = JSON.parse(stripped);
+                        }
+                        catch {
+                            return {
+                                ...r,
+                                detail: `${r.detail} (unsupported JSONC structure in ${path} — please add "${PKG}" to the plugin array manually)`,
+                            };
+                        }
+                        const plugins = Array.isArray(obj.plugin) ? obj.plugin : [];
+                        if (!plugins.some((p) => typeof p === "string" && p.includes(PKG))) {
+                            obj.plugin = [...plugins, PKG];
+                        }
+                        writeFileSync(path, JSON.stringify(obj, null, 2) + "\n", "utf-8");
                         return { ...r, ok: true, detail: `added "${PKG}" to plugin array in ${path}` };
                     }
                     const obj = JSON.parse(readFileSync(path, "utf-8"));

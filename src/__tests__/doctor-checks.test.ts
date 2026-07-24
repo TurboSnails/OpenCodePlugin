@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test"
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
-import { makeContext, runChecks, applyFixes } from "../doctor/checks"
+import { makeContext, runChecks, applyFixes, which } from "../doctor/checks"
 import type { DoctorContext, CheckResult } from "../doctor/checks"
 
 let root: string
@@ -197,6 +197,47 @@ describe("runChecks", () => {
   })
 })
 
+function stubPlatform(platform: string): () => void {
+  const original = process.platform
+  Object.defineProperty(process, "platform", { value: platform, configurable: true })
+  return () => {
+    Object.defineProperty(process, "platform", { value: original, configurable: true })
+  }
+}
+
+describe("which", () => {
+  it("returns false for a non-existent absolute path", () => {
+    expect(which("/does/not/exist/claude", "")).toBe(false)
+  })
+
+  it("returns true for an existing absolute-path executable", () => {
+    const binaryPath = join(cwd, "custom-delegate")
+    writeFileSync(binaryPath, "#!/bin/sh\nexit 0\n")
+    chmodSync(binaryPath, 0o755)
+    expect(which(binaryPath, "")).toBe(true)
+  })
+
+  it("finds .cmd and .bat files on Windows without requiring execute access", () => {
+    const restore = stubPlatform("win32")
+    try {
+      const winBin = join(bin, "claude.cmd")
+      writeFileSync(winBin, "@echo off\n")
+      // No chmod needed: F_OK only checks existence on Windows.
+      expect(which("claude", bin)).toBe(true)
+
+      const batBin = join(bin, "codex.bat")
+      writeFileSync(batBin, "@echo off\n")
+      expect(which("codex", bin)).toBe(true)
+    } finally {
+      restore()
+    }
+  })
+
+  it("does not throw when checking an unreadable path", () => {
+    expect(which(join("/root", "no-access"), "")).toBe(false)
+  })
+})
+
 describe("applyFixes", () => {
   it("regenerates slash commands into the global commands dir", () => {
     const configPath = join(cwd, "cli-dispatch.config.json")
@@ -219,7 +260,7 @@ describe("applyFixes", () => {
     expect(updated.plugin).toContain("opencode-cli-dispatch")
   })
 
-  it("patches an existing opencode.jsonc to add the plugin while preserving comments", () => {
+  it("patches an existing opencode.jsonc to add the plugin (comments are lost)", () => {
     writeFileSync(
       join(cwd, "opencode.jsonc"),
       "{\n  // project plugins\n  \"plugin\": [\"some-plugin\"]\n}\n",
@@ -228,9 +269,16 @@ describe("applyFixes", () => {
     const fixed = byId(results, "plugin-registered")
     expect(fixed.ok).toBe(true)
     expect(fixed.detail).toContain("opencode.jsonc")
-    const updated = readFileSync(join(cwd, "opencode.jsonc"), "utf-8")
-    expect(updated).toContain("opencode-cli-dispatch")
-    expect(updated).toContain("// project plugins")
+    const updated = JSON.parse(readFileSync(join(cwd, "opencode.jsonc"), "utf-8"))
+    expect(updated.plugin).toContain("opencode-cli-dispatch")
+  })
+
+  it("reports a manual fix hint for opencode.jsonc that cannot be parsed after stripping comments", () => {
+    writeFileSync(join(cwd, "opencode.jsonc"), "{\n  // trailing comma is invalid after stripping\n  \"plugin\": [\"some-plugin\",]\n}\n")
+    const results = applyFixes([failedResult("plugin-registered", "Plugin registered")], ctx())
+    const fixed = byId(results, "plugin-registered")
+    expect(fixed.ok).toBe(false)
+    expect(fixed.detail).toContain("unsupported JSONC structure")
   })
 
   it("leaves passing results unchanged", () => {

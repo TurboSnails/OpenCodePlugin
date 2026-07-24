@@ -128,6 +128,16 @@ Each delegate run is bounded by a 10-minute timeout by default, overridable per 
 
 Delegate subprocesses run in the session's project directory (the `directory` OpenCode provides in the tool context), which is also the base for the change summary — falling back to the plugin process cwd if no directory is available.
 
+## Slash commands and `commandsDir`
+
+By default, the plugin writes generated slash-command files (`/cc`, `/claude`, `/codex`, `/opencode`) to `~/.config/opencode/commands/` on every load. You can override this with the `commandsDir` option passed to `createCliDispatchPlugin()`:
+
+```ts
+export default createCliDispatchPlugin(undefined, { commandsDir: ".opencode/command" })
+```
+
+**Limitation:** `cli_dispatch_doctor` and `cli-dispatch doctor --fix` currently target the default global commands directory only (`~/.config/opencode/commands/`). If you set a project-local `commandsDir`, the doctor check will not inspect or regenerate that directory; you should manage those command files manually.
+
 ## Known limitations
 
 Some models don't reliably follow the injected sticky-routing system prompt. Verified 2026-07-19: MiniMax-M3 (`minimax-cn` / `minimaxi-cn`) forwards the entire expanded command template as the prompt instead of just the user's arguments (causing the delegate to refuse as a suspected prompt injection), and ignores the sticky routing rule on plain follow-ups, answering directly instead of calling `{name}_reply`. Kimi (`kimi-for-coding/k3`) has been verified to work correctly with this plugin.
