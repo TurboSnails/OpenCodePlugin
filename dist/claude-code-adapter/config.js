@@ -44,27 +44,30 @@ const DEFAULT_CONFIG = {
 };
 function validateAdapterConfig(config) {
     if (typeof config !== "object" || config === null) {
-        return ["config must be an object"];
+        return [{ level: "error", message: "config must be an object" }];
     }
     const obj = config;
     if (typeof obj.delegates !== "object" || obj.delegates === null) {
-        return ['"delegates" must be an object'];
+        return [{ level: "error", message: '"delegates" must be an object' }];
     }
-    const errors = [];
+    const issues = [];
     if (obj.verifiedModels !== undefined) {
         if (!Array.isArray(obj.verifiedModels)) {
-            errors.push('"verifiedModels" must be an array of model-string patterns');
+            issues.push({ level: "error", message: '"verifiedModels" must be an array of model-string patterns' });
         }
         else {
             for (const entry of obj.verifiedModels) {
                 if (!isValidModelPattern(entry)) {
-                    errors.push(`"verifiedModels" entry ${JSON.stringify(entry)} must be a bare model string, optionally ending in a trailing "*" wildcard`);
+                    issues.push({
+                        level: "error",
+                        message: `"verifiedModels" entry ${JSON.stringify(entry)} must be a bare model string, optionally ending in a trailing "*" wildcard`,
+                    });
                 }
             }
         }
     }
-    errors.push(...validateDelegates(obj.delegates));
-    return errors;
+    issues.push(...validateDelegates(obj.delegates));
+    return issues;
 }
 export function loadAdapterConfig(configPath) {
     const searchPaths = configPath
@@ -75,9 +78,13 @@ export function loadAdapterConfig(configPath) {
             try {
                 const raw = readFileSync(path, "utf-8");
                 const config = JSON.parse(raw);
-                const errors = validateAdapterConfig(config);
+                const issues = validateAdapterConfig(config);
+                for (const issue of issues.filter((i) => i.level === "warning")) {
+                    console.warn(issue.message);
+                }
+                const errors = issues.filter((i) => i.level === "error");
                 if (errors.length > 0) {
-                    throw new Error(`Invalid config at ${path}:\n  - ${errors.join("\n  - ")}`);
+                    throw new Error(`Invalid config at ${path}:\n  - ${errors.map((i) => i.message).join("\n  - ")}`);
                 }
                 return config;
             }

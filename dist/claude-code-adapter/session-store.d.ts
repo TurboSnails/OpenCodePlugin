@@ -1,8 +1,6 @@
 import type { DelegateStore } from "../delegate-store";
-export type DelegateSession = {
-    delegate: string;
-    externalId: string;
-};
+export type { DelegateSession } from "../delegate-store";
+import type { DelegateSession } from "../delegate-store";
 export declare function defaultStateDir(): string;
 export declare const STATE_TTL_MS: number;
 export declare function beginDelegateStart(sessionId: string, dir?: string): number;

@@ -4,7 +4,7 @@ import { GENERATED_MARKER } from "./policy";
 // Canonical home is src/policy.ts; re-exported for backwards compatibility.
 export { GENERATED_MARKER };
 const DELEGATE_COMMAND_TEMPLATE = `---
-description: Delegate this conversation to the {{NAME}} CLI (sticky - follow-ups keep going to {{NAME}} {{UNTIL}})
+description: {{DESCRIPTION}}
 delegate: {{NAME}}
 ---
 
@@ -28,19 +28,30 @@ ${GENERATED_MARKER}
 
 The plugin has already cleared any active CLI delegation for this session — look for a \`[plugin]\` note in this message stating what happened. Reply in one or two sentences, relaying that note: if a delegation was cleared, say which delegate was exited and that opencode is handling the conversation directly again; if no delegation was active, say so. Do not call any delegate tool in response to this command.
 `;
-function generateDelegateCommand(name, otherNames) {
-    const until = otherNames.length > 0
+// Renders the shared template from already-resolved content (description text
+// plus delegate name); the description is composed by the caller rather than
+// derived by mutating a previously-rendered file, so a variant (e.g. the /cc
+// alias) is just a different description through the same renderer.
+function renderDelegateCommand(name, description) {
+    return DELEGATE_COMMAND_TEMPLATE.replace("{{DESCRIPTION}}", description).replaceAll("{{NAME}}", name);
+}
+function untilClause(otherNames) {
+    return otherNames.length > 0
         ? `until another delegate command (${otherNames.map((n) => `/${n}`).join(", ")}) is used`
         : "until delegation is exited with /opencode";
-    return DELEGATE_COMMAND_TEMPLATE.replaceAll("{{NAME}}", name).replaceAll("{{UNTIL}}", until);
+}
+function generateDelegateCommand(name, otherNames) {
+    const description = `Delegate this conversation to the ${name} CLI (sticky - follow-ups keep going to ${name} ${untilClause(otherNames)})`;
+    return renderDelegateCommand(name, description);
 }
 function writeIfChanged(path, content) {
     if (existsSync(path) && readFileSync(path, "utf-8") === content)
         return;
     writeFileSync(path, content, "utf-8");
 }
-function generateCcAlias(name, otherNames) {
-    return generateDelegateCommand(name, otherNames).replace(/^description: .*$/m, `description: Alias for /${name} — delegate this conversation to the ${name} CLI (sticky)`);
+function generateCcAlias(name) {
+    const description = `Alias for /${name} — delegate this conversation to the ${name} CLI (sticky)`;
+    return renderDelegateCommand(name, description);
 }
 export function generateCommands(config, outputDir) {
     if (!existsSync(outputDir)) {
@@ -57,7 +68,7 @@ export function generateCommands(config, outputDir) {
     // Generate /cc alias for claude; never clobber a hand-maintained file
     const ccPath = join(outputDir, "cc.md");
     if (names.includes("claude")) {
-        const alias = generateCcAlias("claude", names.filter((n) => n !== "claude"));
+        const alias = generateCcAlias("claude");
         if (!existsSync(ccPath) || readFileSync(ccPath, "utf-8").includes(GENERATED_MARKER)) {
             writeIfChanged(ccPath, alias);
         }
