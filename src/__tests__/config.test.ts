@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test"
-import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs"
+import { writeFileSync, mkdirSync, mkdtempSync, rmSync, existsSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { loadConfig, resolveArgs, validateDelegates, isValidVerifiedModelEntry, matchesVerifiedModel, getConfigSearchPaths } from "../config"
@@ -398,7 +398,7 @@ describe("matchesVerifiedModel", () => {
 
 describe("argv injection validation", () => {
   it("rejects startArgs with {prompt} but no preceding --", () => {
-    const errors = validateDelegates({
+    const issues = validateDelegates({
       bad: {
         binary: "bad",
         parser: "raw",
@@ -406,11 +406,11 @@ describe("argv injection validation", () => {
         replyArgs: ["--resume", "{externalId}", "--", "{prompt}"],
       },
     })
-    expect(errors.some((e) => e.includes('"startArgs"') && e.includes('"--"'))).toBe(true)
+    expect(issues.some((i) => i.level === "error" && i.message.includes('"startArgs"') && i.message.includes('"--"'))).toBe(true)
   })
 
   it("rejects replyArgs with a bare positional {externalId}", () => {
-    const errors = validateDelegates({
+    const issues = validateDelegates({
       bad: {
         binary: "bad",
         parser: "raw",
@@ -418,7 +418,7 @@ describe("argv injection validation", () => {
         replyArgs: ["resume", "{externalId}", "--", "{prompt}"],
       },
     })
-    expect(errors.some((e) => e.includes("{externalId}"))).toBe(true)
+    expect(issues.some((i) => i.level === "error" && i.message.includes("{externalId}"))).toBe(true)
   })
 
   it("accepts the built-in defaults from both hosts", () => {
@@ -463,6 +463,39 @@ describe("safe built-in defaults", () => {
       console.warn = original
     }
     expect(messages.some((m) => m.includes("claude-code-adapter.config.json") && m.includes("safe built-in defaults"))).toBe(true)
+  })
+
+  it("adapter warns but does not throw when replyArgs lacks the {externalId} placeholder", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cli-dispatch-adapter-warn-"))
+    try {
+      const configPath = join(dir, "claude-code-adapter.config.json")
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          delegates: {
+            myagent: {
+              binary: "myagent",
+              parser: "raw",
+              startArgs: ["--", "{prompt}"],
+              replyArgs: ["--", "{prompt}"],
+            },
+          },
+        }),
+      )
+
+      const warn = spyOn(console, "warn").mockImplementation(() => {})
+      try {
+        const config = loadAdapterConfig(configPath)
+        expect(config.delegates.myagent).toBeDefined()
+        expect(warn).toHaveBeenCalled()
+        const messages = warn.mock.calls.map((args) => String(args[0]))
+        expect(messages.some((m) => m.includes("myagent") && m.includes("{externalId}"))).toBe(true)
+      } finally {
+        warn.mockRestore()
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 

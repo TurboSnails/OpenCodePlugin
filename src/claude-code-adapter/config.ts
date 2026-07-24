@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "fs"
 import { join } from "path"
-import { validateDelegates, type DelegateConfig } from "../config"
+import { validateDelegates, type DelegateConfig, type ValidationIssue } from "../config"
 
 export interface ClaudeCodeAdapterConfig {
   delegates: Record<string, DelegateConfig>
@@ -53,33 +53,36 @@ const DEFAULT_CONFIG: ClaudeCodeAdapterConfig = {
   },
 }
 
-function validateAdapterConfig(config: unknown): string[] {
+function validateAdapterConfig(config: unknown): ValidationIssue[] {
   if (typeof config !== "object" || config === null) {
-    return ["config must be an object"]
+    return [{ level: "error", message: "config must be an object" }]
   }
 
   const obj = config as Record<string, unknown>
   if (typeof obj.delegates !== "object" || obj.delegates === null) {
-    return ['"delegates" must be an object']
+    return [{ level: "error", message: '"delegates" must be an object' }]
   }
 
-  const errors: string[] = []
+  const issues: ValidationIssue[] = []
 
   if (obj.verifiedModels !== undefined) {
     if (!Array.isArray(obj.verifiedModels)) {
-      errors.push('"verifiedModels" must be an array of model-string patterns')
+      issues.push({ level: "error", message: '"verifiedModels" must be an array of model-string patterns' })
     } else {
       for (const entry of obj.verifiedModels) {
         if (!isValidModelPattern(entry)) {
-          errors.push(`"verifiedModels" entry ${JSON.stringify(entry)} must be a bare model string, optionally ending in a trailing "*" wildcard`)
+          issues.push({
+            level: "error",
+            message: `"verifiedModels" entry ${JSON.stringify(entry)} must be a bare model string, optionally ending in a trailing "*" wildcard`,
+          })
         }
       }
     }
   }
 
-  errors.push(...validateDelegates(obj.delegates as Record<string, unknown>))
+  issues.push(...validateDelegates(obj.delegates as Record<string, unknown>))
 
-  return errors
+  return issues
 }
 
 export function loadAdapterConfig(configPath?: string): ClaudeCodeAdapterConfig {
@@ -93,9 +96,13 @@ export function loadAdapterConfig(configPath?: string): ClaudeCodeAdapterConfig 
         const raw = readFileSync(path, "utf-8")
         const config = JSON.parse(raw)
 
-        const errors = validateAdapterConfig(config)
+        const issues = validateAdapterConfig(config)
+        for (const issue of issues.filter((i) => i.level === "warning")) {
+          console.warn(issue.message)
+        }
+        const errors = issues.filter((i) => i.level === "error")
         if (errors.length > 0) {
-          throw new Error(`Invalid config at ${path}:\n  - ${errors.join("\n  - ")}`)
+          throw new Error(`Invalid config at ${path}:\n  - ${errors.map((i) => i.message).join("\n  - ")}`)
         }
 
         return config as ClaudeCodeAdapterConfig
