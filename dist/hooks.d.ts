@@ -45,6 +45,54 @@ type ToolExecuteBeforeInput = {
 type ToolExecuteBeforeOutput = {
     args: any;
 };
+type MessagePartLike = {
+    type: string;
+    tool?: string;
+};
+type SessionMessageLike = {
+    info: {
+        role: string;
+        error?: {
+            name?: string;
+        };
+    };
+    parts: MessagePartLike[];
+};
+export declare function findRoutingViolation(messages: SessionMessageLike[], compliantTools: Set<string>): boolean;
+export type SessionIdleClient = {
+    session: {
+        messages: (options: {
+            path: {
+                id: string;
+            };
+        }) => Promise<{
+            data?: SessionMessageLike[];
+        }>;
+        prompt: (options: {
+            path: {
+                id: string;
+            };
+            body: {
+                noReply?: boolean;
+                parts: Array<{
+                    type: "text";
+                    text: string;
+                    synthetic?: boolean;
+                }>;
+            };
+        }) => Promise<{
+            data?: unknown;
+            error?: unknown;
+        }>;
+    };
+};
+type SessionIdleEventInput = {
+    event: {
+        type: string;
+        properties?: Record<string, unknown>;
+    };
+};
+export declare function makeSessionIdle(config: CliDispatchConfig, client: SessionIdleClient): (input: SessionIdleEventInput) => Promise<void>;
 export declare function makeToolExecuteBefore(config: CliDispatchConfig): (input: ToolExecuteBeforeInput, output: ToolExecuteBeforeOutput) => Promise<void>;
 export {};
 //# sourceMappingURL=hooks.d.ts.map

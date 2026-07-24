@@ -54,6 +54,7 @@ Hooks wire this into OpenCode's chat loop:
 - `experimental.chat.system.transform` injects a routing rule into the system prompt while a delegation is active, so the model calls `{name}_reply` instead of answering directly.
 - `chat.message` tracks the current OpenCode agent per session (used for the restrictive-agent guard) and cleans up injected `@mention` boilerplate text.
 - `command.execute.before` intercepts `/opencode` to deterministically clear the active delegation for the session.
+- `event` reacts to `session.idle`: if a turn during an active delegation called none of the configured delegate tools (and wasn't a user-initiated abort), it disconnects the delegation and posts a visible notice instead of leaving it silently active — see [Known limitations](docs/configuration.md#known-limitations).
 
 Active delegate state (which delegate, which external session id, which OpenCode agent) is kept in an in-memory session store, keyed by OpenCode session id.
 
@@ -86,7 +87,7 @@ Source layout:
 | [src/config.ts](src/config.ts) | Config loading/validation and `{placeholder}` argv resolution. |
 | [src/delegate-tools.ts](src/delegate-tools.ts) | `{name}_start` / `{name}_reply` tool implementations, git-diff change summaries. |
 | [src/health-check.ts](src/health-check.ts) | `{name}_check` tool — isolated writability probe. |
-| [src/hooks.ts](src/hooks.ts) | System-prompt routing injection, agent tracking, `/opencode` exit handling. |
+| [src/hooks.ts](src/hooks.ts) | System-prompt routing injection, agent tracking, `/opencode` exit handling, session-idle routing-violation detection. |
 | [src/commands.ts](src/commands.ts) | Generates the `/{name}` and `/opencode` markdown command files. |
 | [src/routing-rule.ts](src/routing-rule.ts) | Builds the sticky-routing instruction injected into the system prompt. |
 | [src/run-delegate.ts](src/run-delegate.ts) | Spawns the delegate binary and streams stdout to a parser. |

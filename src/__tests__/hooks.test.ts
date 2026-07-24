@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { makeChatMessage, makeCommandBefore, makeToolExecuteBefore } from "../hooks"
+import { makeChatMessage, makeCommandBefore, makeToolExecuteBefore, makeSessionIdle, findRoutingViolation, type SessionIdleClient } from "../hooks"
 import { getSessionAgent, getSessionModel, setSessionModel, setActiveDelegate, getActiveDelegate } from "../session-store"
 import type { CliDispatchConfig } from "../config"
 import { GENERATED_MARKER } from "../commands"
@@ -239,5 +239,142 @@ describe("makeToolExecuteBefore model gate", () => {
     await expect(
       handler({ tool: "claude_start", sessionID: "gate-s5", callID: "c6" }, { args: { prompt: "hi" } }),
     ).resolves.toBeUndefined()
+  })
+})
+
+describe("makeSessionIdle", () => {
+  const twoDelegateConfig: CliDispatchConfig = {
+    delegates: {
+      claude: { binary: "claude", parser: "claude", startArgs: ["{prompt}"], replyArgs: ["{externalId}", "{prompt}"] },
+      codex: { binary: "codex", parser: "codex", startArgs: ["{prompt}"], replyArgs: ["{externalId}", "{prompt}"] },
+    },
+  }
+
+  const userMessage = () => ({ info: { role: "user" }, parts: [{ type: "text" }] })
+  const toolMessage = (tool: string) => ({ info: { role: "assistant" }, parts: [{ type: "tool", tool }] })
+  const textMessage = () => ({ info: { role: "assistant" }, parts: [{ type: "text" }] })
+  const abortedMessage = () => ({ info: { role: "assistant", error: { name: "MessageAbortedError" } }, parts: [] })
+
+  function makeFakeClient(messages: ReturnType<typeof userMessage>[]) {
+    const promptCalls: any[] = []
+    let messagesCalls = 0
+    const client: SessionIdleClient = {
+      session: {
+        messages: async () => {
+          messagesCalls++
+          return { data: messages }
+        },
+        prompt: async (opts) => {
+          promptCalls.push(opts)
+          return { data: {} }
+        },
+      },
+    }
+    return { client, promptCalls, getMessagesCalls: () => messagesCalls }
+  }
+
+  const idleEvent = (sessionID: string) => ({ event: { type: "session.idle", properties: { sessionID } } })
+
+  it("does nothing when no delegation is active for the session", async () => {
+    const { client, getMessagesCalls } = makeFakeClient([userMessage(), textMessage()])
+    const hook = makeSessionIdle(twoDelegateConfig, client)
+
+    await hook(idleEvent("idle-s1"))
+
+    expect(getMessagesCalls()).toBe(0)
+  })
+
+  it("stays active when the turn called the active delegate's reply tool", async () => {
+    setActiveDelegate("idle-s2", "claude", "ext-1")
+    const { client, promptCalls } = makeFakeClient([userMessage(), toolMessage("claude_reply")])
+    const hook = makeSessionIdle(twoDelegateConfig, client)
+
+    await hook(idleEvent("idle-s2"))
+
+    expect(getActiveDelegate("idle-s2")).toEqual({ delegate: "claude", externalId: "ext-1" })
+    expect(promptCalls).toHaveLength(0)
+  })
+
+  it("stays active when the tool call is in an earlier assistant message than the trailing text", async () => {
+    setActiveDelegate("idle-s3", "claude", "ext-1")
+    const { client, promptCalls } = makeFakeClient([userMessage(), toolMessage("claude_reply"), textMessage()])
+    const hook = makeSessionIdle(twoDelegateConfig, client)
+
+    await hook(idleEvent("idle-s3"))
+
+    expect(getActiveDelegate("idle-s3")).toEqual({ delegate: "claude", externalId: "ext-1" })
+    expect(promptCalls).toHaveLength(0)
+  })
+
+  it("disconnects and posts a synthetic notice when the model answers with plain text only", async () => {
+    setActiveDelegate("idle-s4", "claude", "ext-1")
+    const { client, promptCalls } = makeFakeClient([userMessage(), textMessage()])
+    const hook = makeSessionIdle(twoDelegateConfig, client)
+
+    await hook(idleEvent("idle-s4"))
+
+    expect(getActiveDelegate("idle-s4")).toBeUndefined()
+    expect(promptCalls).toHaveLength(1)
+    expect(promptCalls[0].path).toEqual({ id: "idle-s4" })
+    expect(promptCalls[0].body.noReply).toBe(true)
+    expect(promptCalls[0].body.parts[0].synthetic).toBe(true)
+    expect(promptCalls[0].body.parts[0].text).toContain("claude")
+    expect(promptCalls[0].body.parts[0].text).toContain("/claude")
+  })
+
+  it("stays active when the model switches to a different configured delegate's start tool", async () => {
+    setActiveDelegate("idle-s5", "claude", "ext-1")
+    const { client, promptCalls } = makeFakeClient([userMessage(), toolMessage("codex_start")])
+    const hook = makeSessionIdle(twoDelegateConfig, client)
+
+    await hook(idleEvent("idle-s5"))
+
+    expect(getActiveDelegate("idle-s5")).toEqual({ delegate: "claude", externalId: "ext-1" })
+    expect(promptCalls).toHaveLength(0)
+  })
+
+  it("does not disconnect on a user-initiated abort", async () => {
+    setActiveDelegate("idle-s6", "claude", "ext-1")
+    const { client, promptCalls } = makeFakeClient([userMessage(), abortedMessage()])
+    const hook = makeSessionIdle(twoDelegateConfig, client)
+
+    await hook(idleEvent("idle-s6"))
+
+    expect(getActiveDelegate("idle-s6")).toEqual({ delegate: "claude", externalId: "ext-1" })
+    expect(promptCalls).toHaveLength(0)
+  })
+
+  it("ignores event types other than session.idle without querying messages", async () => {
+    setActiveDelegate("idle-s7", "claude", "ext-1")
+    const { client, getMessagesCalls } = makeFakeClient([userMessage(), textMessage()])
+    const hook = makeSessionIdle(twoDelegateConfig, client)
+
+    await hook({ event: { type: "session.status", properties: { sessionID: "idle-s7" } } })
+
+    expect(getMessagesCalls()).toBe(0)
+    expect(getActiveDelegate("idle-s7")).toEqual({ delegate: "claude", externalId: "ext-1" })
+  })
+})
+
+describe("findRoutingViolation", () => {
+  const compliant = new Set(["claude_start", "claude_reply"])
+  const userMessage = () => ({ info: { role: "user" }, parts: [] })
+
+  it("reports no violation when there is no user message yet", () => {
+    expect(findRoutingViolation([], compliant)).toBe(false)
+  })
+
+  it("reports no violation when nothing has been generated since the last user message", () => {
+    expect(findRoutingViolation([userMessage()], compliant)).toBe(false)
+  })
+
+  it("reports a violation when the only reply is plain text", () => {
+    const messages = [userMessage(), { info: { role: "assistant" }, parts: [{ type: "text" }] }]
+    expect(findRoutingViolation(messages, compliant)).toBe(true)
+  })
+
+  it("reports no violation when a compliant tool was called", () => {
+    const messages = [userMessage(), { info: { role: "assistant" }, parts: [{ type: "tool", tool: "claude_reply" }] }]
+    expect(findRoutingViolation(messages, compliant)).toBe(false)
   })
 })

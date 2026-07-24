@@ -35,6 +35,7 @@
 - `experimental.chat.system.transform`：在有活跃委托时，向系统提示词中注入一条路由规则，让模型调用 `{name}_reply` 而不是自己直接作答。
 - `chat.message`：按会话记录当前使用的 OpenCode agent（供受限 agent 防护使用），并清理注入的 `@mention` 样板文本。
 - `command.execute.before`：拦截 `/opencode` 命令，确定性地清除该会话当前激活的委托状态。
+- `event`：响应 `session.idle` 事件——如果活跃委托期间的这一轮没有调用任何已配置 delegate 的工具（且不是用户主动中断），就断开该委托并留下一条可见提示，而不是让它继续静默地"假装"生效——参见[已知限制](docs/configuration.md#known-limitations)。
 
 当前激活的 delegate 状态（哪个 delegate、对应的外部会话 id、当前 OpenCode agent）保存在内存中的一个会话状态存储里，以 OpenCode 会话 id 为 key。
 
@@ -61,7 +62,7 @@ bun test         # bun test，测试文件见 src/__tests__
 | [src/config.ts](src/config.ts) | 配置加载/校验，以及 `{占位符}` 参数模板解析。 |
 | [src/delegate-tools.ts](src/delegate-tools.ts) | `{name}_start` / `{name}_reply` 工具实现，以及基于 git diff 的变更摘要。 |
 | [src/health-check.ts](src/health-check.ts) | `{name}_check` 工具——隔离环境下的可写性探测。 |
-| [src/hooks.ts](src/hooks.ts) | 系统提示词路由注入、agent 跟踪、`/opencode` 退出处理。 |
+| [src/hooks.ts](src/hooks.ts) | 系统提示词路由注入、agent 跟踪、`/opencode` 退出处理、session-idle 路由违规检测。 |
 | [src/commands.ts](src/commands.ts) | 生成 `/{name}` 和 `/opencode` 的 markdown 命令文件。 |
 | [src/routing-rule.ts](src/routing-rule.ts) | 构建注入到系统提示词中的粘性路由指令。 |
 | [src/run-delegate.ts](src/run-delegate.ts) | 启动 delegate 二进制并把 stdout 流式传给解析器。 |

@@ -5,11 +5,11 @@ import { loadConfig } from "./config";
 import { makeStartTool, makeReplyTool } from "./delegate-tools";
 import { makeCheckTool } from "./health-check";
 import { makeDoctorTool } from "./doctor/tool";
-import { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore } from "./hooks";
+import { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore, makeSessionIdle } from "./hooks";
 import { generateCommands } from "./commands";
 export { loadConfig, resolveArgs } from "./config";
 export { makeStartTool, makeReplyTool } from "./delegate-tools";
-export { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore } from "./hooks";
+export { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore, makeSessionIdle } from "./hooks";
 export { generateCommands } from "./commands";
 export { runDelegate, defaultSpawn } from "./run-delegate";
 export { getActiveDelegate, setActiveDelegate, clearActiveDelegate } from "./session-store";
@@ -18,7 +18,7 @@ export { getParser } from "./parse-events";
 export { checkDelegate, makeCheckTool } from "./health-check";
 export { makeDoctorTool } from "./doctor/tool";
 export function createCliDispatchPlugin(configPath, options) {
-    return async () => {
+    return async (input) => {
         let tools;
         let config;
         try {
@@ -54,6 +54,7 @@ export function createCliDispatchPlugin(configPath, options) {
             "chat.message": makeChatMessage(),
             "command.execute.before": makeCommandBefore(config),
             "tool.execute.before": makeToolExecuteBefore(config),
+            event: makeSessionIdle(config, input.client),
         };
     };
 }

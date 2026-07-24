@@ -2,7 +2,7 @@ import type { Plugin } from "@opencode-ai/plugin";
 export type { CliDispatchConfig, DelegateConfig, ParserName } from "./config";
 export { loadConfig, resolveArgs } from "./config";
 export { makeStartTool, makeReplyTool } from "./delegate-tools";
-export { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore } from "./hooks";
+export { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore, makeSessionIdle } from "./hooks";
 export { generateCommands } from "./commands";
 export { runDelegate, defaultSpawn } from "./run-delegate";
 export { getActiveDelegate, setActiveDelegate, clearActiveDelegate } from "./session-store";

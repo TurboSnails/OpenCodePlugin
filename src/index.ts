@@ -1,18 +1,18 @@
 import { homedir } from "os"
 import { join } from "path"
-import type { Plugin, Hooks } from "@opencode-ai/plugin"
+import type { Plugin, Hooks, PluginInput } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
 import { loadConfig, type CliDispatchConfig } from "./config"
 import { makeStartTool, makeReplyTool } from "./delegate-tools"
 import { makeCheckTool } from "./health-check"
 import { makeDoctorTool } from "./doctor/tool"
-import { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore } from "./hooks"
+import { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore, makeSessionIdle } from "./hooks"
 import { generateCommands } from "./commands"
 
 export type { CliDispatchConfig, DelegateConfig, ParserName } from "./config"
 export { loadConfig, resolveArgs } from "./config"
 export { makeStartTool, makeReplyTool } from "./delegate-tools"
-export { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore } from "./hooks"
+export { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore, makeSessionIdle } from "./hooks"
 export { generateCommands } from "./commands"
 export { runDelegate, defaultSpawn } from "./run-delegate"
 export { getActiveDelegate, setActiveDelegate, clearActiveDelegate } from "./session-store"
@@ -22,7 +22,7 @@ export { checkDelegate, makeCheckTool } from "./health-check"
 export { makeDoctorTool } from "./doctor/tool"
 
 export function createCliDispatchPlugin(configPath?: string, options?: { commandsDir?: string }): Plugin {
-  return async () => {
+  return async (input: PluginInput) => {
     let tools: NonNullable<Hooks["tool"]>
     let config: CliDispatchConfig
 
@@ -64,6 +64,7 @@ export function createCliDispatchPlugin(configPath?: string, options?: { command
       "chat.message": makeChatMessage(),
       "command.execute.before": makeCommandBefore(config),
       "tool.execute.before": makeToolExecuteBefore(config),
+      event: makeSessionIdle(config, input.client),
     }
   }
 }
