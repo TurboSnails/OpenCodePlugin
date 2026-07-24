@@ -3,10 +3,8 @@ import { tmpdir } from "os"
 import { join } from "path"
 import type { DelegateStore } from "../delegate-store"
 
-export type DelegateSession = {
-  delegate: string
-  externalId: string
-}
+export type { DelegateSession } from "../delegate-store"
+import type { DelegateSession } from "../delegate-store"
 
 // Claude Code hooks and the MCP server run as separate processes per event,
 // so delegation state lives in one small JSON file per Claude Code session
