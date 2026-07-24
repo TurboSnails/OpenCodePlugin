@@ -80,6 +80,23 @@ describe("buildChangeSummary", () => {
     expect(summary).toContain("config.ts")
     expect(summary).not.toContain("old-scratch.txt")
   })
+
+  it("truncates past 50 lines and marks the summary as truncated", () => {
+    initRepoWithCommit()
+    const before = snapshotWorktree(dir)!
+
+    for (let i = 0; i < 60; i++) {
+      writeFileSync(join(dir, `new-file-${i}.txt`), "x\n")
+    }
+
+    const after = snapshotWorktree(dir)!
+    const summary = buildChangeSummary(before, after, dir)!
+
+    expect(summary).not.toBeNull()
+    expect(summary).toContain("... (truncated)")
+    const newFileLines = summary.split("\n").filter((l) => l.startsWith("new file: "))
+    expect(newFileLines.length).toBe(50)
+  })
 })
 
 const claudeConfig: DelegateConfig = {
