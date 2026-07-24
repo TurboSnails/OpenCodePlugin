@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, readdirSync, accessSync, constants, mkdtempSync, rmSync, writeFileSync } from "fs"
-import { join, delimiter } from "path"
+import { join, delimiter, isAbsolute } from "path"
 import { tmpdir } from "os"
 import type { CliDispatchConfig } from "../config"
 import { loadConfig, getConfigSearchPaths, DEFAULT_CONFIG } from "../config"
 import { checkDelegate, type RunDelegateFn } from "../health-check"
-import { generateCommands } from "../commands"
+import { generateCommands, GENERATED_MARKER } from "../commands"
 import { makeContext, type DoctorContext } from "./context"
 
 export { makeContext, type DoctorContext } from "./context"
@@ -96,13 +96,25 @@ function checkConfigFile(ctx: DoctorContext): { result: CheckResult; config: Cli
 }
 
 function which(binary: string, pathEnv: string): boolean {
-  for (const dir of pathEnv.split(delimiter)) {
-    if (!dir) continue
+  if (isAbsolute(binary)) {
+    if (!existsSync(binary)) return false
     try {
-      accessSync(join(dir, binary), constants.X_OK)
+      accessSync(binary, constants.X_OK)
       return true
     } catch {
-      // not here
+      return false
+    }
+  }
+  const names = process.platform === "win32" ? [binary, `${binary}.exe`] : [binary]
+  for (const name of names) {
+    for (const dir of pathEnv.split(delimiter)) {
+      if (!dir) continue
+      try {
+        accessSync(join(dir, name), constants.X_OK)
+        return true
+      } catch {
+        // not here
+      }
     }
   }
   return false
@@ -114,7 +126,7 @@ function checkBinaries(config: CliDispatchConfig, ctx: DoctorContext): CheckResu
     .filter((b, i, all) => all.indexOf(b) === i)
     .filter((b) => !which(b, ctx.pathEnv))
   if (missing.length === 0) {
-    return { id: "delegate-binaries", label: "Delegate binaries", ok: true, detail: "all delegate binaries found on PATH" }
+    return { id: "delegate-binaries", label: "Delegate binaries", ok: true, detail: "all delegate binaries found" }
   }
   return {
     id: "delegate-binaries",
@@ -177,7 +189,14 @@ function checkSlashCommands(config: CliDispatchConfig, ctx: DoctorContext): Chec
   const tmp = mkdtempSync(join(tmpdir(), "cli-dispatch-doctor-cmds-"))
   try {
     generateCommands(config, tmp)
-    const expected = readdirSync(tmp).filter((f) => f.endsWith(".md"))
+    const expected = readdirSync(tmp)
+      .filter((f) => f.endsWith(".md"))
+      .filter((file) => {
+        const target = join(dir, file)
+        // Hand-maintained files (no generated marker) are not managed by us.
+        if (!existsSync(target)) return true
+        return readFileSync(target, "utf-8").includes(GENERATED_MARKER)
+      })
     const stale: string[] = []
     for (const file of expected) {
       const target = join(dir, file)
@@ -224,7 +243,7 @@ export async function runChecks(ctx: DoctorContext, run: RunDelegateFn): Promise
   results.push(await safe("plugin-registered", "Plugin registered", () => checkPluginRegistered(ctx)))
 
   const configOutcome = await safe("config-file", "Config file", () => checkConfigFile(ctx).result)
-  // config 需要在 safe 外提取以便后续检查使用
+  // config needs to be loaded outside safe() so subsequent checks can use it
   try {
     config = loadConfigForContext(ctx)
   } catch {
@@ -253,10 +272,30 @@ export function applyFixes(results: CheckResult[], ctx: DoctorContext): CheckRes
       }
     }
     if (r.id === "plugin-registered") {
-      const candidates = [join(ctx.cwd, "opencode.json"), join(ctx.homeDir, ".config", "opencode", "opencode.json")]
+      const candidates = [
+        join(ctx.cwd, "opencode.json"),
+        join(ctx.cwd, "opencode.jsonc"),
+        join(ctx.homeDir, ".config", "opencode", "opencode.json"),
+        join(ctx.homeDir, ".config", "opencode", "opencode.jsonc"),
+      ]
       for (const path of candidates) {
         if (!existsSync(path)) continue
         try {
+          if (path.endsWith(".jsonc")) {
+            const text = readFileSync(path, "utf-8")
+            if (text.includes(PKG)) {
+              return { ...r, ok: true, detail: `plugin already declared in ${path}` }
+            }
+            const pluginMatch = text.match(/"plugin"\s*:\s*\[([\s\S]*?)\]/)
+            if (!pluginMatch) continue
+            const fullMatch = pluginMatch[0]
+            const arrayContent = pluginMatch[1]
+            const closeIndex = fullMatch.lastIndexOf("]")
+            const separator = arrayContent.trim().length > 0 ? ", " : ""
+            const replacement = `${fullMatch.slice(0, closeIndex)}${separator}"${PKG}"${fullMatch.slice(closeIndex)}`
+            writeFileSync(path, text.replace(fullMatch, replacement), "utf-8")
+            return { ...r, ok: true, detail: `added "${PKG}" to plugin array in ${path}` }
+          }
           const obj = JSON.parse(readFileSync(path, "utf-8"))
           const plugins: string[] = Array.isArray(obj.plugin) ? obj.plugin : []
           if (!plugins.some((p) => typeof p === "string" && p.includes(PKG))) {
@@ -268,7 +307,7 @@ export function applyFixes(results: CheckResult[], ctx: DoctorContext): CheckRes
           // fall through to next candidate / report-only
         }
       }
-      return { ...r, detail: `${r.detail} (no writable opencode.json found to patch — apply the fixHint manually)` }
+      return { ...r, detail: `${r.detail} (no writable opencode.json(c) found to patch — apply the fixHint manually)` }
     }
     return r
   })

@@ -108,6 +108,45 @@ describe("runChecks", () => {
     expect(check.detail).toContain("built-in defaults")
   })
 
+  it("recognizes an absolute-path binary as found", async () => {
+    const binaryPath = join(cwd, "custom-claude")
+    writeFileSync(binaryPath, "#!/bin/sh\nexit 0\n")
+    chmodSync(binaryPath, 0o755)
+    const configPath = join(cwd, "cli-dispatch.config.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          claude: {
+            binary: binaryPath,
+            parser: "claude",
+            startArgs: ["-p", "--", "{prompt}"],
+            replyArgs: ["-p", "--resume", "{externalId}", "--", "{prompt}"],
+          },
+        },
+      }),
+    )
+    const results = await run(ctx({ configPath }))
+    const check = byId(results, "delegate-binaries")
+    expect(check.ok).toBe(true)
+    expect(check.detail).toContain("all delegate binaries found")
+  })
+
+  it("does not flag a hand-maintained cc.md as stale", async () => {
+    const commandsDir = join(home, ".config", "opencode", "commands")
+    mkdirSync(commandsDir, { recursive: true })
+    // Generate managed commands so only cc.md is potentially different.
+    applyFixes([failedResult("slash-commands", "Slash commands")], ctx())
+    // Replace the generated cc.md with a hand-maintained file.
+    writeFileSync(
+      join(commandsDir, "cc.md"),
+      "---\ndescription: My custom /cc\n---\n\nHand-maintained command.\n",
+    )
+    const results = await run(ctx())
+    const check = byId(results, "slash-commands")
+    expect(check.ok).toBe(true)
+  })
+
   it("detects delegate binaries on PATH and reports missing ones", async () => {
     writeFakeBinary(bin, "claude")
     const results = await run(ctx())
@@ -178,6 +217,20 @@ describe("applyFixes", () => {
     expect(fixed.detail).toContain("opencode-cli-dispatch")
     const updated = JSON.parse(readFileSync(join(cwd, "opencode.json"), "utf-8"))
     expect(updated.plugin).toContain("opencode-cli-dispatch")
+  })
+
+  it("patches an existing opencode.jsonc to add the plugin while preserving comments", () => {
+    writeFileSync(
+      join(cwd, "opencode.jsonc"),
+      "{\n  // project plugins\n  \"plugin\": [\"some-plugin\"]\n}\n",
+    )
+    const results = applyFixes([failedResult("plugin-registered", "Plugin registered")], ctx())
+    const fixed = byId(results, "plugin-registered")
+    expect(fixed.ok).toBe(true)
+    expect(fixed.detail).toContain("opencode.jsonc")
+    const updated = readFileSync(join(cwd, "opencode.jsonc"), "utf-8")
+    expect(updated).toContain("opencode-cli-dispatch")
+    expect(updated).toContain("// project plugins")
   })
 
   it("leaves passing results unchanged", () => {

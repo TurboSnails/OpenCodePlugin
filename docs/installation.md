@@ -31,9 +31,9 @@ From the *other* project's directory:
 # once published
 bun add opencode-cli-dispatch
 # or, before publish, install the local tarball built with npm pack
-npm install /path/to/mcpOC/opencode-cli-dispatch-1.0.0.tgz
+npm install /path/to/mcpOC/opencode-cli-dispatch-1.0.1.tgz
 # or, to depend on it by path instead of copying the tarball into node_modules once:
-npm install "file:/path/to/mcpOC/opencode-cli-dispatch-1.0.0.tgz"
+npm install "file:/path/to/mcpOC/opencode-cli-dispatch-1.0.1.tgz"
 ```
 
 Then register it in that project's `opencode.json` / `opencode.jsonc`:

@@ -1,11 +1,9 @@
 export function formatResults(results) {
     const lines = [];
-    let firstFailure = true;
     for (const r of results) {
         lines.push(`${r.ok ? "✓" : "✗"} ${r.label} (${r.id}): ${r.detail}`);
-        if (!r.ok && firstFailure && r.fixHint) {
+        if (!r.ok && r.fixHint) {
             lines.push(`  → fix: ${r.fixHint}`);
-            firstFailure = false;
         }
     }
     const failed = results.some((r) => !r.ok);
