@@ -50,7 +50,7 @@ Codex host
 |---|---|---|
 | `src/codex-adapter/config.ts` | New | Load `codex-adapter.config.json` (or fallback to `cli-dispatch.config.json`); `verifiedModels` is a bare model slug pattern list (`"gpt-5.6-sol"`, `"gpt-*"`). |
 | `src/codex-adapter/mcp-server.ts` | New | stdio MCP server built on `@modelcontextprotocol/sdk`; registers `{name}_start`, `{name}_reply`, and `cli_dispatch_status` tools from config. |
-| `src/codex-adapter/store.ts` | New | File-backed `DelegateStore` under `~/.codex/cli-dispatch/` with simple file lock; implements `beginDelegateStart` / `setActiveDelegateIfLatest`. |
+| `src/codex-adapter/store.ts` | New | File-backed `DelegateStore` under `~/.codex/cli-dispatch/` with simple file lock; implements `beginDelegateStart` / `setActiveDelegateIfLatest`. The MCP server learns the current Codex `session_id` from a `current-session` file written by the `UserPromptSubmit` hook (Codex does not pass session id to MCP server processes). |
 | `src/codex-adapter/hooks.ts` | New | Hook entry script dispatching by `hook_event_name` to `user-prompt-submit.ts`, `pre-tool-use.ts`, `session-end.ts`. |
 | `src/codex-adapter/setup.ts` | New | `cli-dispatch codex setup/update/uninstall` implementation; writes MCP config, hooks, prompts idempotently. |
 | `src/codex-adapter/prompts.ts` | New | Generates `~/.codex/prompts/*.md` with `GENERATED_MARKER`; cleans up stale generated files. |
@@ -136,6 +136,7 @@ Hook entry `src/codex-adapter/hooks.ts` is registered in `~/.codex/hooks.json` a
 
 ### `UserPromptSubmit`
 
+- Write the incoming `session_id` to `~/.codex/cli-dispatch/current-session` so the long-lived MCP server can key its store correctly.
 - If active delegate exists and user sends exit keyword (`/prompts:opencode` or `/opencode`): clear store, return `systemMessage`.
 - If active delegate exists and prompt contains `GENERATED_MARKER`: return `decision: "block"` with reason.
 - If active delegate exists: return `additionalContext` instructing the model to call `{delegate}_reply`.
@@ -205,6 +206,6 @@ Setup actions:
 |---|---|
 | Global `~/.codex/` only | Project-local trust is fragile across path aliases; global config is stable and documented. |
 | MCP server + hooks + prompts | These are the three public extension surfaces Codex already supports; no internal API dependency. |
-| File-backed store | Each hook invocation is a separate process; only the MCP server is long-lived. |
+| File-backed store + current-session file | Each hook invocation is a separate process; the MCP server is long-lived but Codex does not give it the session id, so the `UserPromptSubmit` hook writes the current `session_id` to a file the MCP server reads. |
 | Separate `codex-adapter.config.json` | Codex exposes bare model slugs, not `provider/model`, so verified-models patterns differ from OpenCode. |
 | `/prompts:opencode` as exit | Codex has no deterministic slash-command interception hook, so a custom prompt plus `UserPromptSubmit` detection is the closest equivalent. The name is reserved, so a delegate named `opencode` is rejected. |
