@@ -7,7 +7,7 @@ import { z } from "zod"
 import { loadCodexAdapterConfig, type CodexAdapterConfig } from "./config"
 import { startDelegate, replyDelegate } from "./delegate-tools"
 import { codexFileDelegateStore, readCurrentSession } from "./session-store"
-import { MCP_SERVER_NAME } from "./constants"
+import { MCP_SERVER_NAME, STATUS_TOOL_NAME } from "./constants"
 
 export { MCP_SERVER_NAME }
 
@@ -16,7 +16,7 @@ export function mcpToolName(delegate: string, kind: "start" | "reply"): string {
 }
 
 export function listCodexDelegateTools(config: CodexAdapterConfig): string[] {
-  return [...Object.keys(config.delegates).flatMap((name) => [`${name}_start`, `${name}_reply`]), "cli_dispatch_status"]
+  return [...Object.keys(config.delegates).flatMap((name) => [`${name}_start`, `${name}_reply`]), STATUS_TOOL_NAME]
 }
 
 function errorResult(err: unknown) {
@@ -61,7 +61,7 @@ export function makeCodexMcpServer(config: CodexAdapterConfig): McpServer {
   }
 
   server.registerTool(
-    "cli_dispatch_status",
+    STATUS_TOOL_NAME,
     {
       description: "Report the active CLI delegation status for the current Codex session.",
       inputSchema: {},

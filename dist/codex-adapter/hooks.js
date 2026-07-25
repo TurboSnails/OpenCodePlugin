@@ -24,7 +24,13 @@ export function runHookEntry(raw) {
     return JSON.stringify(output);
 }
 if (import.meta.main) {
-    const raw = readFileSync(0, "utf-8");
+    let raw = "";
+    try {
+        raw = readFileSync(0, "utf-8");
+    }
+    catch {
+        raw = "";
+    }
     process.stdout.write(runHookEntry(raw) + "\n");
 }
 //# sourceMappingURL=hooks.js.map

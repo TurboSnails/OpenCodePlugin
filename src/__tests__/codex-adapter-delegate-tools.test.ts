@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test"
 import { startDelegate, replyDelegate } from "../codex-adapter/delegate-tools"
-import { writeCurrentSession } from "../codex-adapter/session-store"
+import { writeCurrentSession, codexFileDelegateStore } from "../codex-adapter/session-store"
 import { mkdtempSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
@@ -33,6 +33,7 @@ describe("startDelegate", () => {
     })
     expect(result).toContain("ok")
     expect(seen).toEqual(["run"])
+    expect(codexFileDelegateStore(dir).getActiveDelegate("sess-1")).toEqual({ delegate: "claude", externalId: "ext-1234" })
     rmSync(dir, { recursive: true, force: true })
   })
 })

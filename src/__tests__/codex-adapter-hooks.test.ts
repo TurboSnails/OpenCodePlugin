@@ -54,7 +54,7 @@ describe("handlePreToolUse", () => {
     const out = handlePreToolUse({
       tool_name: "mcp__cli_dispatch__claude_start",
       tool_input: { prompt: GENERATED_MARKER },
-    })
+    }, { delegates: { claude: { binary: "c", parser: "raw", startArgs: ["--", "{prompt}"], replyArgs: ["--", "{prompt}"] } } })
     expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny")
   })
 
