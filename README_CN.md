@@ -39,11 +39,25 @@
 
 当前激活的 delegate 状态（哪个 delegate、对应的外部会话 id、当前 OpenCode agent）保存在内存中的一个会话状态存储里，以 OpenCode 会话 id 为 key。
 
-## 安装、配置与 Claude Code 适配器
+## 安装、配置与宿主适配器
 
 - 安装与打包：详见 [docs/installation.md](docs/installation.md)（英文）。
 - 配置、权限与已知限制：详见 [docs/configuration.md](docs/configuration.md)（英文）。
 - Claude Code 适配器：详见 [docs/claude-code-adapter.md](docs/claude-code-adapter.md)（英文）。
+
+## Codex 宿主适配器
+
+Codex 也可以作为宿主，把对话委托给 `claude`、`codex` 或任何已配置的 CLI agent，契约与 OpenCode 宿主一致（粘性路由、verified-models 门控、prompt 清洗），实现基于 Codex 的 MCP server + hooks + 自定义 prompts。
+
+```bash
+cli-dispatch codex setup        # 安装/更新 Codex 全局配置
+cli-dispatch codex doctor       # 检查安装状态
+cli-dispatch codex uninstall    # 移除生成的配置
+```
+
+在 Codex 中用 `/prompts:claude <消息>` 开始委托，`/prompts:opencode` 退出。粘性路由同样是尽力而为。
+
+详见 [docs/codex-adapter.md](docs/codex-adapter.md)（英文）。
 
 ## 开发
 
@@ -69,6 +83,7 @@ bun test         # bun test，测试文件见 src/__tests__
 | [src/parse-events.ts](src/parse-events.ts) | 各 CLI 的 stdout 事件解析器（`claude`、`codex`、`opencode`、`raw`）。 |
 | [src/session-store.ts](src/session-store.ts) | 按 OpenCode 会话 id 存储的内存态 delegate/agent 状态。 |
 | [src/claude-code-adapter/](src/claude-code-adapter/) | Claude Code 宿主适配器：MCP server、`PreToolUse`/`UserPromptSubmit` hooks、文件持久化的会话状态。 |
+| [src/codex-adapter/](src/codex-adapter/) | Codex 宿主适配器：MCP server、`UserPromptSubmit`/`PreToolUse`/`SessionEnd` hooks、prompt 生成、`cli-dispatch codex` setup CLI。 |
 
 ## 许可证
 

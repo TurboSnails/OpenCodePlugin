@@ -1,13 +1,13 @@
 # opencode-cli-dispatch 实现文档
 
-> 版本：`1.0.2`  
+> 版本：`1.0.3`  
 > 本文档描述当前 `opencode-cli-dispatch` 插件的整体实现方案、核心模块、数据流、安全策略与扩展方式。
 
 ---
 
 ## 1. 项目概述
 
-`opencode-cli-dispatch` 是一个 **OpenCode 插件**，同时附带 **Claude Code 适配器**。它把 OpenCode/Claude Code 的对话委派给外部 CLI 编码代理（如 Claude Code、Codex、或其他可配置的 CLI），并把外部代理的输出流式地返回给宿主。
+`opencode-cli-dispatch` 是一个 **OpenCode 插件**，同时附带 **Claude Code 适配器** 与 **Codex 适配器**。它把 OpenCode/Claude Code/Codex 的对话委派给外部 CLI 编码代理（如 Claude Code、Codex、或其他可配置的 CLI），并把外部代理的输出流式地返回给宿主。
 
 核心能力：
 
@@ -356,6 +356,7 @@ const EXTERNAL_ID_RE = /^[A-Za-z0-9_-]{8,128}$/
 - 只接受字母、数字、下划线、连字符。
 - 长度限制 8–128。
 - 不符合时回退到客户端生成的 `crypto.randomUUID()`，避免把恶意字符串注入后续命令参数。
+- 回退发生时输出 `console.warn` 提醒：delegate 上报的 session id 校验失败，后续 reply 可能无法正确 resume（parser 完全不上报 id 时不告警，那是 raw delegate 的正常情况）。
 
 ### 8.2 Argv 注入防护
 
@@ -474,7 +475,7 @@ setActiveDelegateIfLatest(seq)  // 仅当 seq 仍是最新时才写入
 
 ## 12. 测试策略
 
-项目使用 `bun:test`，测试文件位于 `src/__tests__/`。截至 `1.0.2` 共有 245 个测试，覆盖：
+项目使用 `bun:test`，测试文件位于 `src/__tests__/`。截至 `1.0.3` 共有 299 个测试，覆盖：
 
 | 测试文件 | 覆盖内容 |
 |---|---|
@@ -492,6 +493,7 @@ setActiveDelegateIfLatest(seq)  // 仅当 seq 仍是最新时才写入
 | `doctor-cli.test.ts` | CLI 退出码、裸环境失败 |
 | `doctor-tool.test.ts` | 插件内 doctor 工具覆盖六项 id |
 | `claude-code-adapter-*.test.ts` | Claude Code 适配器 |
+| `codex-adapter-*.test.ts` | Codex 适配器：配置、store、delegate-tools、MCP server、hooks、prompts、setup |
 
 ### 12.1 `dist/` 同步校验
 
@@ -557,10 +559,10 @@ git tag v1.0.3
 git push origin v1.0.3
 ```
 
-`v1.0.2` 已按此流程发布：
+`v1.0.2` / `v1.0.3` 已按此流程发布：
 
 - npm: https://www.npmjs.com/package/opencode-cli-dispatch
-- GitHub Release: https://github.com/TurboSnails/OpenCodePlugin/releases/tag/v1.0.2
+- GitHub Release: https://github.com/TurboSnails/OpenCodePlugin/releases
 
 ---
 
@@ -727,9 +729,10 @@ Codex 的 MCP server 进程拿不到当前 session id，而 hook 每次调用都
 - `docs/installation.md`：安装方式（npm / tarball / git / 本地插件）
 - `docs/configuration.md`：配置参考、权限说明、已知限制
 - `docs/claude-code-adapter.md`：Claude Code 宿主适配器说明
+- `docs/codex-adapter.md`：Codex 宿主适配器说明
 - `docs/superpowers/specs/2026-07-22-onboarding-sprint-design.md`：Onboarding Sprint 设计 spec
 - `docs/superpowers/plans/2026-07-22-onboarding-sprint.md`：Onboarding Sprint 实现计划
 
 ---
 
-*本文档随 `v1.0.2` 编写，后续版本如有架构变更应同步更新。*
+*本文档随 `v1.0.3` 编写，后续版本如有架构变更应同步更新。*

@@ -27,7 +27,7 @@ Slash commands (`/<delegate>`, `/cc`, `/opencode`) are written to `~/.config/ope
 
 **Stuck?** Run `npx opencode-cli-dispatch doctor` (or `cli-dispatch doctor --fix`) — it checks registration, config, binaries, authentication, writability, and slash commands, and tells you exactly what to fix.
 
-Full docs: [Installation](docs/installation.md) · [Configuration](docs/configuration.md) · [Claude Code adapter](docs/claude-code-adapter.md)
+Full docs: [Installation](docs/installation.md) · [Configuration](docs/configuration.md) · [Claude Code adapter](docs/claude-code-adapter.md) · [Codex adapter](docs/codex-adapter.md)
 
 ## Features
 
@@ -83,6 +83,8 @@ cli-dispatch codex uninstall    # remove generated artifacts
 ```
 
 Then in Codex, use `/prompts:claude <message>` to delegate, `/prompts:opencode` to exit. Sticky routing is best-effort, same as OpenCode.
+
+See [docs/codex-adapter.md](docs/codex-adapter.md) for configuration, session-id discovery, and security details.
 
 ## Development
 
