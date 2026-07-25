@@ -1,14 +1,22 @@
 #!/usr/bin/env bun
-import { runChecks, applyFixes } from "./checks"
-import { makeContext } from "./context"
-import { formatResults } from "./format"
-import { runDelegate } from "../run-delegate"
+export {}
 
-const fix = process.argv.includes("--fix")
+const subcommand = process.argv[2]
 
-const ctx = makeContext()
-const results = await runChecks(ctx, runDelegate)
-const final = fix ? applyFixes(results, ctx) : results
+if (subcommand === "codex") {
+  const { runCodexCli } = await import("../codex-adapter/cli.js")
+  await runCodexCli()
+} else {
+  const { runChecks, applyFixes } = await import("./checks")
+  const { makeContext } = await import("./context")
+  const { formatResults } = await import("./format")
+  const { runDelegate } = await import("../run-delegate")
 
-console.log(formatResults(final))
-process.exit(final.some((r) => !r.ok) ? 1 : 0)
+  const fix = process.argv.includes("--fix")
+  const ctx = makeContext()
+  const results = await runChecks(ctx, runDelegate)
+  const final = fix ? applyFixes(results, ctx) : results
+
+  console.log(formatResults(final))
+  process.exit(final.some((r) => !r.ok) ? 1 : 0)
+}
