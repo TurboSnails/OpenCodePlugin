@@ -70,6 +70,20 @@ See [docs/configuration.md](docs/configuration.md) for delegate configuration, v
 
 See [docs/claude-code-adapter.md](docs/claude-code-adapter.md) for using the adapter with Claude Code as the host.
 
+## Codex host adapter
+
+Codex can also act as a host, delegating to `claude`, `codex`, or any other configured CLI agent with the same sticky-routing/verified-models/prompt-sanitization contract — implemented on Codex's MCP server + hooks + custom prompts.
+
+Setup:
+
+```bash
+cli-dispatch codex setup        # install/update global Codex config
+cli-dispatch codex doctor       # verify installation
+cli-dispatch codex uninstall    # remove generated artifacts
+```
+
+Then in Codex, use `/prompts:claude <message>` to delegate, `/prompts:opencode` to exit. Sticky routing is best-effort, same as OpenCode.
+
 ## Development
 
 ```bash
@@ -94,6 +108,7 @@ Source layout:
 | [src/parse-events.ts](src/parse-events.ts) | Per-CLI stdout event parsers (`claude`, `codex`, `opencode`, `raw`). |
 | [src/session-store.ts](src/session-store.ts) | In-memory per-OpenCode-session delegate/agent state. |
 | [src/claude-code-adapter/](src/claude-code-adapter) | Claude Code host adapter: MCP server, `PreToolUse`/`UserPromptSubmit` hooks, file-backed session store. |
+| [src/codex-adapter/](src/codex-adapter) | Codex host adapter: MCP server, `UserPromptSubmit`/`PreToolUse`/`SessionEnd` hooks, generated prompts, `cli-dispatch codex` setup CLI. |
 
 ## License
 

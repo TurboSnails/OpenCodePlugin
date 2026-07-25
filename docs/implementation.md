@@ -69,14 +69,15 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.1 两个宿主入口
+### 2.1 三个宿主入口
 
 | 宿主 | 入口文件 | 集成方式 |
 |---|---|---|
 | **OpenCode** | `src/index.ts` 导出的 `createCliDispatchPlugin()` | 插件系统（`tool` + `hooks`） |
 | **Claude Code** | `src/claude-code-adapter/` | MCP 服务器 + 本地 hooks（`.claude/settings.json`） |
+| **Codex** | `src/codex-adapter/` | MCP 服务器（`config.toml`）+ hooks（`hooks.json`）+ 自定义 prompts |
 
-两个宿主共享同一套核心逻辑：`config.ts`、`delegate-turn.ts`、`run-delegate.ts`、`parse-events.ts`、`session-store.ts`、`policy.ts` 等。
+三个宿主共享同一套核心逻辑：`config.ts`、`delegate-turn.ts`、`run-delegate.ts`、`parse-events.ts`、`session-store.ts`、`policy.ts` 等。
 
 ---
 
@@ -101,6 +102,7 @@
 | `src/routing-rule.ts` | 生成注入 system prompt 的 sticky 路由规则 | `buildRoutingRule` |
 | `src/doctor/` | 安装诊断（A2 sprint 新增） | `runChecks`, `applyFixes`, `formatResults`, `makeDoctorTool` |
 | `src/claude-code-adapter/` | Claude Code 宿主适配（MCP server + hooks） | 见该目录下模块 |
+| `src/codex-adapter/` | Codex 宿主适配（MCP server + hooks + prompts + setup CLI） | 见第 17 章 |
 
 ---
 
@@ -649,7 +651,60 @@ export default createCliDispatchPlugin(undefined, { commandsDir: ".opencode/comm
 
 ---
 
-## 17. 关键设计决策
+## 17. Codex 宿主适配器
+
+Codex 也可以作为宿主，把对话委派给 `claude`、`codex` 或任何已配置的 CLI 代理，契约与 OpenCode/Claude Code 宿主一致（sticky 路由、verified models 门控、prompt 模板清洗），但实现基元换成 Codex 自己的：MCP server + hooks + 自定义 prompts。
+
+### 17.1 架构总览
+
+| 组件 | 文件 | 作用 |
+|---|---|---|
+| MCP server | `src/codex-adapter/mcp-server.ts` | stdio MCP 服务器，按配置注册每个 delegate 的 `{name}_start` / `{name}_reply` 工具，外加 `cli_dispatch_status` |
+| Hook 分发器 | `src/codex-adapter/hooks.ts` | 短生命周期进程：从 stdin 读 hook 事件 JSON，按 `hook_event_name` 分发到三个 handler |
+| Hook handlers | `src/codex-adapter/hooks/{user-prompt-submit,pre-tool-use,session-end}.ts` | 退出命令、sticky 路由注入、模板误转发拦截、verified models 门控、会话结束清理 |
+| Prompt 生成 | `src/codex-adapter/prompts.ts` | 向 `~/.codex/prompts/` 生成 `/{name}.md`（委派）和 `opencode.md`（退出），Codex 中以 `/prompts:<name>` 调用 |
+| 配置 | `src/codex-adapter/config.ts` | 适配器配置加载与验证 |
+| 状态存储 | `src/codex-adapter/session-store.ts` | 文件态委派状态 + `current-session` 文件 |
+| Setup CLI | `src/codex-adapter/setup.ts` + `cli.ts` | `cli-dispatch codex <setup\|uninstall\|doctor> [--dry-run]` |
+
+### 17.2 配置
+
+查找链（`getCodexConfigSearchPaths`）：
+
+1. `codex-adapter.config.json`（cwd）
+2. `.codex/cli-dispatch.config.json`（cwd）
+3. `~/.codex/cli-dispatch.config.json`
+4. 都没有时回退到主配置 `cli-dispatch.config.json` 的 `delegates`
+
+`delegates` 条目形状与 OpenCode 主配置完全一致（复用 `validateDelegates`）。差异点：
+
+- `verifiedModels` 是裸模型字符串模式（`"gpt-5.6-sol"`、`"gpt-*"`、`"*"`），因为 Codex hook 不暴露 provider 维度；尾 `*` 通配、大小写敏感。
+- delegate 名 `opencode` 被保留（它是退出 prompt 的名字），配置中出现即报错。
+
+### 17.3 会话 ID 发现（D-store 设计）
+
+Codex 的 MCP server 进程拿不到当前 session id，而 hook 每次调用都是独立进程。解决方案：`UserPromptSubmit` hook 每次把 `session_id` 写入 `~/.codex/cli-dispatch/current-session`（写临时文件再 rename，原子替换），MCP server 调工具时读这个文件确定当前会话。委派状态本身按 session 一个 JSON 小文件存放在同目录（0700），复用 Claude Code 适配器的 `fileDelegateStore`。
+
+### 17.4 Hook 语义
+
+- **`UserPromptSubmit`**：写 `current-session`；若 prompt 是 `/opencode`（或 `/prompts:opencode`）则确定性清除该会话的活动委派；若 prompt 含 `GENERATED_MARKER`（整个命令模板被误当作用户消息）则 `block`；若存在活动委派，则通过 `additionalContext` 注入路由指令（调用 `{delegate}_reply`，不要直接回答）。
+- **`PreToolUse`**（matcher `mcp__cli_dispatch__.*`，只拦本适配器的 MCP 工具）：prompt 参数含 `GENERATED_MARKER` 则 `deny`（模板误转发防护）；配置了 `verifiedModels` 且当前模型不匹配时 `deny`，策略与 OpenCode 一致（模型未知时 fail-open）。
+- **`SessionEnd`**：清除该会话的活动委派状态。
+
+### 17.5 Setup / Uninstall / Doctor
+
+`cli-dispatch codex setup` 做四件事（全部幂等，`--dry-run` 只打印不写盘）：
+
+1. 确保状态目录 `~/.codex/cli-dispatch/` 存在（0700）。
+2. 生成 prompts 到 `~/.codex/prompts/`（带 `GENERATED_MARKER`，清理时只删带标记的文件，不碰手写 prompt）。
+3. 在 `~/.codex/config.toml` 中 upsert `[mcp_servers.cli_dispatch]` 段（按段头定位，保留其他内容）。
+4. 在 `~/.codex/hooks.json` 注册三个 hook 事件（`UserPromptSubmit`、`PreToolUse`、`SessionEnd`），按 command 字符串去重。
+
+`uninstall` 反向移除上述生成物；`doctor` 检查 MCP 注册、hook 注册、退出 prompt 是否存在，输出修复建议。setup 后需在 Codex 里运行 `/hooks` 信任新 hook 并重启 Codex。
+
+---
+
+## 18. 关键设计决策
 
 | 决策 | 原因 |
 |---|---|
@@ -661,10 +716,12 @@ export default createCliDispatchPlugin(undefined, { commandsDir: ".opencode/comm
 | 并发 start 用序列号竞争 | 保证最新发起的委派胜出，避免旧进程覆盖新会话。 |
 | 文件持久化 + 24h TTL | OpenCode 进程可能重启，需要恢复状态；TTL 防止使用过期的 externalId。 |
 | doctor 设计成插件外 CLI 优先 | 当插件本身没加载成功时，插件内工具不可用，外部 CLI 必须能独立运行。 |
+| Codex 会话 id 经 `current-session` 文件传递 | Codex 的 MCP server 进程拿不到 session id，由 hook 写文件、server 读文件解耦（D-store）。 |
+| Codex delegate 名保留 `opencode` | 退出 prompt 固定叫 `opencode.md`，同名 delegate 会让 `/prompts:opencode` 语义冲突。 |
 
 ---
 
-## 18. 相关文档
+## 19. 相关文档
 
 - `README.md`：快速上手指南
 - `docs/installation.md`：安装方式（npm / tarball / git / 本地插件）
