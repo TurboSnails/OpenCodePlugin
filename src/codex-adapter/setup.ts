@@ -5,7 +5,6 @@ import { fileURLToPath } from "url"
 import { loadCodexAdapterConfig } from "./config"
 import { generateCodexPrompts } from "./prompts"
 import { MCP_SERVER_NAME } from "./constants"
-import { defaultCodexStateDir } from "./session-store"
 import { GENERATED_MARKER } from "../policy"
 
 const moduleDir = dirname(fileURLToPath(import.meta.url))
@@ -31,6 +30,14 @@ function ensureDir(dir: string): void {
   try {
     chmodSync(dir, 0o700)
   } catch {}
+}
+
+function shellQuoteArg(arg: string): string {
+  return `"${arg.replace(/(["\\$`])/g, "\\$1")}"`
+}
+
+function hookCommandString(command: string[]): string {
+  return command.map(shellQuoteArg).join(" ")
 }
 
 const MCP_SECTION_HEADER = `[mcp_servers.${MCP_SERVER_NAME}]`
@@ -95,7 +102,7 @@ export function setupCodexAdapter(options: SetupOptions = {}): string[] {
   const home = options.homeDir ?? homedir()
   const config = loadCodexAdapterConfig(options.configPath)
 
-  const stateDir = defaultCodexStateDir()
+  const stateDir = join(home, ".codex", "cli-dispatch")
   if (!options.dryRun) ensureDir(stateDir)
   changes.push(`ensured ${stateDir} (0700)`)
 
@@ -112,7 +119,7 @@ export function setupCodexAdapter(options: SetupOptions = {}): string[] {
   changes.push(`registered MCP server ${MCP_SERVER_NAME} in ${configTomlPath}`)
 
   const hooksPath = join(home, ".codex", "hooks.json")
-  const hooksCommand = (options.hooksCommand ?? defaultHooksCommand()).join(" ")
+  const hooksCommand = hookCommandString(options.hooksCommand ?? defaultHooksCommand())
   const hooksJson = existsSync(hooksPath)
     ? (JSON.parse(readFileSync(hooksPath, "utf-8")) as { hooks?: Record<string, Array<Record<string, unknown>>> })
     : {}
@@ -129,7 +136,7 @@ export function setupCodexAdapter(options: SetupOptions = {}): string[] {
 export function uninstallCodexAdapter(options: SetupOptions = {}): string[] {
   const changes: string[] = []
   const home = options.homeDir ?? homedir()
-  const hooksCommand = (options.hooksCommand ?? defaultHooksCommand()).join(" ")
+  const hooksCommand = hookCommandString(options.hooksCommand ?? defaultHooksCommand())
 
   const configTomlPath = join(home, ".codex", "config.toml")
   if (existsSync(configTomlPath)) {

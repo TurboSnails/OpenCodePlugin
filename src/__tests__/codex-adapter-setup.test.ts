@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test"
 import { setupCodexAdapter, uninstallCodexAdapter, doctorCodexAdapter } from "../codex-adapter/setup"
 import { mkdtempSync, readFileSync, existsSync, rmSync } from "fs"
 import { join } from "path"
-import { tmpdir } from "os"
+import { tmpdir, homedir } from "os"
 
 describe("setupCodexAdapter", () => {
   it("writes mcp config, hooks, and prompts under a fake home", () => {
@@ -24,6 +24,25 @@ describe("setupCodexAdapter", () => {
     const home = mkdtempSync(join(tmpdir(), "codex-setup-"))
     setupCodexAdapter({ homeDir: home, dryRun: true })
     expect(existsSync(join(home, ".codex", "config.toml"))).toBe(false)
+    rmSync(home, { recursive: true, force: true })
+  })
+
+  it("creates the state dir under homeDir, not the real home", () => {
+    const home = mkdtempSync(join(tmpdir(), "codex-setup-"))
+    const changes = setupCodexAdapter({ homeDir: home, dryRun: false })
+    expect(existsSync(join(home, ".codex", "cli-dispatch"))).toBe(true)
+    expect(changes.some((c) => c.includes(join(home, ".codex", "cli-dispatch")))).toBe(true)
+    expect(changes.some((c) => c.includes(join(homedir(), ".codex", "cli-dispatch")))).toBe(false)
+    rmSync(home, { recursive: true, force: true })
+  })
+
+  it("shell-quotes the hook command segments", () => {
+    const home = mkdtempSync(join(tmpdir(), "codex-setup-"))
+    setupCodexAdapter({ homeDir: home, dryRun: false, hooksCommand: ["bun", "run", "/path/with spaces/hooks.js"] })
+    const hooksJson = JSON.parse(readFileSync(join(home, ".codex", "hooks.json"), "utf-8")) as {
+      hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>
+    }
+    expect(hooksJson.hooks.UserPromptSubmit[0].hooks[0].command).toBe('"bun" "run" "/path/with spaces/hooks.js"')
     rmSync(home, { recursive: true, force: true })
   })
 })

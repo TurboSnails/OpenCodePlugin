@@ -1,3 +1,3 @@
 #!/usr/bin/env bun
-export {};
+export declare function runHookEntry(raw: string): string;
 //# sourceMappingURL=hooks.d.ts.map

@@ -3,18 +3,28 @@ import { readFileSync } from "fs";
 import { handleUserPromptSubmit } from "./hooks/user-prompt-submit";
 import { handlePreToolUse } from "./hooks/pre-tool-use";
 import { handleSessionEnd } from "./hooks/session-end";
-const raw = readFileSync(0, "utf-8");
-const input = JSON.parse(raw);
-const event = input.hook_event_name;
-let output = {};
-if (event === "UserPromptSubmit") {
-    output = handleUserPromptSubmit(input);
+export function runHookEntry(raw) {
+    let output = {};
+    try {
+        const input = JSON.parse(raw);
+        const event = input.hook_event_name;
+        if (event === "UserPromptSubmit") {
+            output = handleUserPromptSubmit(input);
+        }
+        else if (event === "PreToolUse") {
+            output = handlePreToolUse(input) ?? {};
+        }
+        else if (event === "SessionEnd") {
+            handleSessionEnd(input);
+        }
+    }
+    catch {
+        output = {};
+    }
+    return JSON.stringify(output);
 }
-else if (event === "PreToolUse") {
-    output = handlePreToolUse(input) ?? {};
+if (import.meta.main) {
+    const raw = readFileSync(0, "utf-8");
+    process.stdout.write(runHookEntry(raw) + "\n");
 }
-else if (event === "SessionEnd") {
-    handleSessionEnd(input);
-}
-process.stdout.write(JSON.stringify(output) + "\n");
 //# sourceMappingURL=hooks.js.map

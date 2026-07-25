@@ -5,7 +5,6 @@ import { fileURLToPath } from "url";
 import { loadCodexAdapterConfig } from "./config";
 import { generateCodexPrompts } from "./prompts";
 import { MCP_SERVER_NAME } from "./constants";
-import { defaultCodexStateDir } from "./session-store";
 import { GENERATED_MARKER } from "../policy";
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 function defaultMcpServerCommand() {
@@ -20,6 +19,12 @@ function ensureDir(dir) {
         chmodSync(dir, 0o700);
     }
     catch { }
+}
+function shellQuoteArg(arg) {
+    return `"${arg.replace(/(["\\$`])/g, "\\$1")}"`;
+}
+function hookCommandString(command) {
+    return command.map(shellQuoteArg).join(" ");
 }
 const MCP_SECTION_HEADER = `[mcp_servers.${MCP_SERVER_NAME}]`;
 function upsertMcpSection(toml, section) {
@@ -77,7 +82,7 @@ export function setupCodexAdapter(options = {}) {
     const changes = [];
     const home = options.homeDir ?? homedir();
     const config = loadCodexAdapterConfig(options.configPath);
-    const stateDir = defaultCodexStateDir();
+    const stateDir = join(home, ".codex", "cli-dispatch");
     if (!options.dryRun)
         ensureDir(stateDir);
     changes.push(`ensured ${stateDir} (0700)`);
@@ -94,7 +99,7 @@ export function setupCodexAdapter(options = {}) {
         writeFileSync(configTomlPath, toml, "utf-8");
     changes.push(`registered MCP server ${MCP_SERVER_NAME} in ${configTomlPath}`);
     const hooksPath = join(home, ".codex", "hooks.json");
-    const hooksCommand = (options.hooksCommand ?? defaultHooksCommand()).join(" ");
+    const hooksCommand = hookCommandString(options.hooksCommand ?? defaultHooksCommand());
     const hooksJson = existsSync(hooksPath)
         ? JSON.parse(readFileSync(hooksPath, "utf-8"))
         : {};
@@ -110,7 +115,7 @@ export function setupCodexAdapter(options = {}) {
 export function uninstallCodexAdapter(options = {}) {
     const changes = [];
     const home = options.homeDir ?? homedir();
-    const hooksCommand = (options.hooksCommand ?? defaultHooksCommand()).join(" ");
+    const hooksCommand = hookCommandString(options.hooksCommand ?? defaultHooksCommand());
     const configTomlPath = join(home, ".codex", "config.toml");
     if (existsSync(configTomlPath)) {
         const toml = removeMcpSection(readFileSync(configTomlPath, "utf-8"));
