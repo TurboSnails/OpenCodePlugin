@@ -49,14 +49,41 @@ describe("startDelegateTurn", () => {
   it("ignores a reported externalId outside the conservative pattern and falls back to the client-generated id", async () => {
     const store = makeStore()
     const fakeRun = async () => ({ finalText: "hi", externalId: "-p rm -rf", stderrText: "" })
-    await startDelegateTurn({
-      name: "codex", cfg: codexConfig, store, sessionKey: "s1", prompt: "hello",
-      homeCommand: "/cc", onProgress: () => {}, run: fakeRun as any,
-      cwd: mkdtempSync(join(tmpdir(), "delegate-turn-test-")),
-    })
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (msg?: unknown) => { warnings.push(String(msg)) }
+    try {
+      await startDelegateTurn({
+        name: "codex", cfg: codexConfig, store, sessionKey: "s1", prompt: "hello",
+        homeCommand: "/cc", onProgress: () => {}, run: fakeRun as any,
+        cwd: mkdtempSync(join(tmpdir(), "delegate-turn-test-")),
+      })
+    } finally {
+      console.warn = originalWarn
+    }
     expect(store.saved).toHaveLength(1)
     expect(store.saved[0].externalId).not.toBe("-p rm -rf")
     expect(store.saved[0].externalId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(warnings.some((w) => w.includes("failed validation"))).toBe(true)
+  })
+
+  it("does not warn when the parser reports no externalId at all", async () => {
+    const store = makeStore()
+    const fakeRun = async () => ({ finalText: "hi", externalId: undefined, stderrText: "" })
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (msg?: unknown) => { warnings.push(String(msg)) }
+    try {
+      await startDelegateTurn({
+        name: "codex", cfg: codexConfig, store, sessionKey: "s1", prompt: "hello",
+        homeCommand: "/cc", onProgress: () => {}, run: fakeRun as any,
+        cwd: mkdtempSync(join(tmpdir(), "delegate-turn-test-")),
+      })
+    } finally {
+      console.warn = originalWarn
+    }
+    expect(store.saved).toHaveLength(1)
+    expect(warnings.some((w) => w.includes("failed validation"))).toBe(false)
   })
 
   it("still returns the result when an older start loses the race", async () => {

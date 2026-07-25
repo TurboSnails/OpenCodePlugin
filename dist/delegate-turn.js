@@ -37,6 +37,10 @@ export async function startDelegateTurn(options) {
     // Ignore a parser-reported id outside the conservative pattern (design
     // D4) and fall back to the client-generated session id.
     const externalId = result.externalId && isValidExternalId(result.externalId) ? result.externalId : sessionId;
+    if (result.externalId && externalId === sessionId) {
+        console.warn(`[cli-dispatch] ${name} reported a session id that failed validation; falling back to a client-generated id. ` +
+            `The delegate session may not resume correctly on the next reply.`);
+    }
     store.setActiveDelegateIfLatest(sessionKey, name, externalId, startSequence);
     const summary = before === null ? null : buildChangeSummary(before, snapshotWorktree(workDir) ?? before, workDir);
     return (result.finalText || `(${name} returned no text response)`) + (summary ?? "");
