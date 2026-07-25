@@ -98,9 +98,10 @@ export function setupCodexAdapter(options = {}) {
     const hooksJson = existsSync(hooksPath)
         ? JSON.parse(readFileSync(hooksPath, "utf-8"))
         : {};
-    const changed = upsertHook(hooksJson, "UserPromptSubmit", hooksCommand) ||
-        upsertHook(hooksJson, "PreToolUse", hooksCommand, `mcp__${MCP_SERVER_NAME}__.*`) ||
-        upsertHook(hooksJson, "SessionEnd", hooksCommand);
+    const changedUserPromptSubmit = upsertHook(hooksJson, "UserPromptSubmit", hooksCommand);
+    const changedPreToolUse = upsertHook(hooksJson, "PreToolUse", hooksCommand, `mcp__${MCP_SERVER_NAME}__.*`);
+    const changedSessionEnd = upsertHook(hooksJson, "SessionEnd", hooksCommand);
+    const changed = changedUserPromptSubmit || changedPreToolUse || changedSessionEnd;
     if (!options.dryRun && changed)
         writeFileSync(hooksPath, JSON.stringify(hooksJson, null, 2), "utf-8");
     changes.push(`registered hooks in ${hooksPath}`);
@@ -151,7 +152,7 @@ export function doctorCodexAdapter(options = {}) {
     if (!existsSync(configTomlPath) || !readFileSync(configTomlPath, "utf-8").includes(MCP_SECTION_HEADER)) {
         lines.push(`MCP server ${MCP_SERVER_NAME} is not registered in ${configTomlPath}`);
     }
-    if (!existsSync(hooksPath) || !readFileSync(hooksPath, "utf-8").includes("cli-dispatch")) {
+    if (!existsSync(hooksPath) || !readFileSync(hooksPath, "utf-8").includes(`mcp__${MCP_SERVER_NAME}__`)) {
         lines.push(`hooks are not registered in ${hooksPath}`);
     }
     if (!existsSync(join(promptsDir, "opencode.md"))) {
