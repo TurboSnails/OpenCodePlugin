@@ -31,12 +31,12 @@
 
 - 修改 `src/commands.ts` 的 `generateCommands`，在生成的命令模板开头加入护栏指令，大意：
   > 先检查 `{name}_start` 工具是否存在。若不存在，告知用户：委派插件未加载（当前会话可能早于插件安装/更新），请重启 opencode 后重试；然后停止，不要尝试其他方式。
-- 重新生成全局命令文件 `~/.config/opencode/commands/cc.md`、`codex.md`（及 `/opencode` 如适用）。
+- 重新生成全局命令文件 `~/.config/opencode/commands/cc.md`、`codex.md`（`/opencode` 是退出命令，不涉及工具调用，不加护栏）。
 - 效果：旧会话遇到缺失工具时，用户得到明确可执行的指引，而非 "unavailable in this environment"。
 
 ### 3. 版本对齐与 doctor
 
-- `@opencode-ai/plugin` 依赖版本与本机 opencode（当前 1.18.4）对齐并钉死（移除 `^` 浮动或使用精确版本）。
+- `devDependencies` 中 `@opencode-ai/plugin` 改为精确版本（当前 1.18.4，与本机 opencode 对齐）；`peerDependencies` 保留 `>=1.18.0`，由 doctor 检查实际安装版本与 opencode 版本一致并告警。
 - 复用并扩展现有 doctor（`src/doctor/`，bin `cli-dispatch`）：确保覆盖以下检查——
   - 模拟插件加载并断言 6 个工具（`claude_start/reply/check`、`codex_start/reply/check`）注册成功；
   - `claude`、`codex` 二进制在 PATH 且可执行；
