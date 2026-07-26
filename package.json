@@ -1,6 +1,6 @@
 {
   "name": "opencode-cli-dispatch",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "OpenCode plugin for delegating conversations to external CLI agents (Claude, Codex, etc.)",
   "type": "module",
   "main": "dist/index.js",
