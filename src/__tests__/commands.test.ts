@@ -106,6 +106,29 @@ describe("generateCommands", () => {
     expect(readFileSync(join(dir, "cc.md"), "utf-8")).toBe("# my custom cc command\n")
   })
 
+  it("includes a tool-availability guard in every delegate command", () => {
+    generateCommands(configWith("claude", "codex"), dir)
+
+    const claude = readFileSync(join(dir, "claude.md"), "utf-8")
+    expect(claude).toContain("Tool availability check")
+    expect(claude).toContain("claude_start")
+    expect(claude).toContain("restart opencode")
+
+    const cc = readFileSync(join(dir, "cc.md"), "utf-8")
+    expect(cc).toContain("Tool availability check")
+    expect(cc).toContain("claude_start")
+
+    const codex = readFileSync(join(dir, "codex.md"), "utf-8")
+    expect(codex).toContain("Tool availability check")
+    expect(codex).toContain("codex_start")
+  })
+
+  it("does not add the guard to the /opencode exit command", () => {
+    generateCommands(configWith("claude"), dir)
+    const content = readFileSync(join(dir, "opencode.md"), "utf-8")
+    expect(content).not.toContain("Tool availability check")
+  })
+
   it("removes a stale generated cc.md when claude is no longer configured", () => {
     generateCommands(configWith("claude"), dir)
     expect(existsSync(join(dir, "cc.md"))).toBe(true)

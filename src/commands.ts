@@ -13,6 +13,8 @@ delegate: {{NAME}}
 
 ${GENERATED_MARKER}
 
+**Tool availability check (do this first):** if the \`{{NAME}}_start\` tool is not among your available tools, the cli-dispatch plugin is not loaded in this session (the session likely started before the plugin was installed or updated; the fix is to restart opencode so the plugin loads). Tell the user exactly this: "委派插件未加载：当前会话早于插件安装/更新，请退出并重启 opencode 后重试 /{{NAME}}。" Then stop — do not answer the delegated message yourself.
+
 Delegate this conversation to the {{NAME}} CLI.
 
 **Right now:** if no {{NAME}} session is active yet for this conversation, call the \`{{NAME}}_start\` tool with the user's message (the text after /{{NAME}}, or the whole message if /{{NAME}} was sent alone) as the \`prompt\` argument. If a {{NAME}} session is already active, call \`{{NAME}}_reply\` instead. Return the tool's response to the user as your answer — do not add your own commentary on top of it unless the user asks a question about it separately.
