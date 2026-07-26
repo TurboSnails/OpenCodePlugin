@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test"
-import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs"
+import { describe, it, expect, beforeEach, afterEach, spyOn, mock } from "bun:test"
+import { writeFileSync, mkdirSync, rmSync, existsSync, mkdtempSync } from "fs"
+import { tmpdir } from "os"
 import { join } from "path"
 import { createCliDispatchPlugin } from "../index"
 
@@ -35,7 +36,7 @@ describe("createCliDispatchPlugin", () => {
       }),
     )
 
-    const hooks = await createCliDispatchPlugin(configPath)({} as any)
+    const hooks = await createCliDispatchPlugin(configPath, { commandsDir: join(TEST_DIR, "commands") })({} as any)
 
     expect(hooks.tool).toBeDefined()
     expect(Object.keys(hooks.tool!)).toEqual([
@@ -61,7 +62,7 @@ describe("createCliDispatchPlugin", () => {
     )
 
     const error = spyOn(console, "error").mockImplementation(() => {})
-    const hooks = await createCliDispatchPlugin(configPath)({} as any)
+    const hooks = await createCliDispatchPlugin(configPath, { commandsDir: join(TEST_DIR, "commands") })({} as any)
     expect(error).toHaveBeenCalled()
     error.mockRestore()
 
@@ -86,7 +87,7 @@ describe("createCliDispatchPlugin", () => {
     const error = spyOn(console, "error").mockImplementation(() => {})
     let hooks
     try {
-      hooks = await createCliDispatchPlugin(configPath)({} as any)
+      hooks = await createCliDispatchPlugin(configPath, { commandsDir: join(TEST_DIR, "commands") })({} as any)
     } finally {
       error.mockRestore()
     }
@@ -98,5 +99,34 @@ describe("createCliDispatchPlugin", () => {
     expect(output).toContain("startArgs")
     expect(output).toContain("replyArgs")
     expect(output).toMatch(/fix|edit|restart/i)
+  })
+
+  it("defaults commandsDir to ~/.config/opencode/commands when no option is given", async () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), "cli-dispatch-homedir-test-"))
+    const configPath = join(TEST_DIR, "config.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: {
+            binary: "myagent",
+            parser: "raw",
+            startArgs: ["--", "{prompt}"],
+            replyArgs: ["--resume", "{externalId}", "--", "{prompt}"],
+          },
+        },
+      }),
+    )
+
+    const realOs = await import("os")
+    mock.module("os", () => ({ ...realOs, homedir: () => fakeHome }))
+    try {
+      await createCliDispatchPlugin(configPath)({} as any)
+      expect(existsSync(join(fakeHome, ".config", "opencode", "commands", "myagent.md"))).toBe(true)
+      expect(existsSync(join(TEST_DIR, "commands"))).toBe(false)
+    } finally {
+      mock.restore()
+      rmSync(fakeHome, { recursive: true, force: true })
+    }
   })
 })
