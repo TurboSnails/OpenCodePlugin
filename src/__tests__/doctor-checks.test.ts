@@ -174,16 +174,27 @@ describe("runChecks", () => {
     expect(check.ok).toBe(false)
   })
 
-  it("runs all six checks in fixed order", async () => {
+  it("runs all seven checks in fixed order", async () => {
     const results = await run(ctx())
     expect(results.map((r) => r.id)).toEqual([
       "plugin-registered",
       "config-file",
+      "plugin-tools",
       "delegate-binaries",
       "cli-authenticated",
       "writability-probe",
       "slash-commands",
     ])
+  })
+
+  it("plugin-tools check passes and lists delegate tools", async () => {
+    const results = await run(ctx())
+    const tools = results.find((r) => r.id === "plugin-tools")
+    expect(tools).toBeDefined()
+    expect(tools!.ok).toBe(true)
+    expect(tools!.detail).toContain("claude_start")
+    expect(tools!.detail).toContain("claude_reply")
+    expect(tools!.detail).toContain("claude_check")
   })
 
   it("preserves the check id and label when a check throws", async () => {

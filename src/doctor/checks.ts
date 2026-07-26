@@ -66,6 +66,25 @@ function checkPluginRegistered(ctx: DoctorContext): CheckResult {
   }
 }
 
+async function checkPluginTools(ctx: DoctorContext, config: CliDispatchConfig): Promise<CheckResult> {
+  const { createCliDispatchPlugin } = await import("../index.js")
+  const configPath = resolveConfigPath(ctx)
+  const hooks = await createCliDispatchPlugin(configPath)({} as Parameters<ReturnType<typeof createCliDispatchPlugin>>[0])
+  const registered = Object.keys(hooks.tool ?? {})
+  const expected = Object.keys(config.delegates).flatMap((n) => [`${n}_start`, `${n}_reply`, `${n}_check`])
+  const missing = expected.filter((t) => !registered.includes(t))
+  if (missing.length === 0) {
+    return { id: "plugin-tools", label: "Plugin tools", ok: true, detail: `registered: ${registered.join(", ")}` }
+  }
+  return {
+    id: "plugin-tools",
+    label: "Plugin tools",
+    ok: false,
+    detail: `tools missing after simulated load: ${missing.join(", ")}`,
+    fixHint: "Rebuild the plugin (bun run build) and re-run doctor. If it persists, check that dist/ is up to date with src/.",
+  }
+}
+
 function checkConfigFile(ctx: DoctorContext): { result: CheckResult; config: CliDispatchConfig } {
   const found = resolveConfigPath(ctx)
   try {
@@ -257,6 +276,7 @@ export async function runChecks(ctx: DoctorContext, run: RunDelegateFn): Promise
   }
   results.push(configOutcome)
 
+  results.push(await safe("plugin-tools", "Plugin tools", () => checkPluginTools(ctx, config)))
   results.push(await safe("delegate-binaries", "Delegate binaries", () => checkBinaries(config, ctx)))
   results.push(await safe("cli-authenticated", "CLI authentication", () => checkAuthenticated(config, ctx)))
   results.push(await safe("writability-probe", "Writability probe", () => checkWritability(config, run)))

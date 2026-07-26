@@ -53,6 +53,24 @@ function checkPluginRegistered(ctx) {
             `Run "cli-dispatch doctor --fix" to patch an existing opencode.json automatically.`,
     };
 }
+async function checkPluginTools(ctx, config) {
+    const { createCliDispatchPlugin } = await import("../index.js");
+    const configPath = resolveConfigPath(ctx);
+    const hooks = await createCliDispatchPlugin(configPath)({});
+    const registered = Object.keys(hooks.tool ?? {});
+    const expected = Object.keys(config.delegates).flatMap((n) => [`${n}_start`, `${n}_reply`, `${n}_check`]);
+    const missing = expected.filter((t) => !registered.includes(t));
+    if (missing.length === 0) {
+        return { id: "plugin-tools", label: "Plugin tools", ok: true, detail: `registered: ${registered.join(", ")}` };
+    }
+    return {
+        id: "plugin-tools",
+        label: "Plugin tools",
+        ok: false,
+        detail: `tools missing after simulated load: ${missing.join(", ")}`,
+        fixHint: "Rebuild the plugin (bun run build) and re-run doctor. If it persists, check that dist/ is up to date with src/.",
+    };
+}
 function checkConfigFile(ctx) {
     const found = resolveConfigPath(ctx);
     try {
@@ -240,6 +258,7 @@ export async function runChecks(ctx, run) {
         config = { delegates: {} };
     }
     results.push(configOutcome);
+    results.push(await safe("plugin-tools", "Plugin tools", () => checkPluginTools(ctx, config)));
     results.push(await safe("delegate-binaries", "Delegate binaries", () => checkBinaries(config, ctx)));
     results.push(await safe("cli-authenticated", "CLI authentication", () => checkAuthenticated(config, ctx)));
     results.push(await safe("writability-probe", "Writability probe", () => checkWritability(config, run)));
