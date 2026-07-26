@@ -18,12 +18,13 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "test": "bun test"
+    "test": "bun test",
+    "prepare": "bun run build"
   },
   "devDependencies": {
     "typescript": "^5.4.0",
     "@types/bun": "latest",
-    "@opencode-ai/plugin": "^1.18.3"
+    "@opencode-ai/plugin": "1.18.4"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.18.0"

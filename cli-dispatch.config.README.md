@@ -52,6 +52,14 @@ If the field is omitted, the plugin fails open and gates nothing.
 4. If it answers directly, the model does NOT honor the contract — do NOT add
    it; the gate will (correctly) refuse to start a delegation with that model.
 
+## After installing or updating the plugin
+
+opencode loads plugins once at startup. After installing or updating
+opencode-cli-dispatch (or regenerating slash commands), quit and restart
+opencode. Long-running sessions started before an update will not have the
+`claude_start` / `codex_start` tools; the `/cc` and `/codex` commands detect
+this and tell you to restart.
+
 ## Recovery
 
 If opencode refuses to start because of a malformed config, set
