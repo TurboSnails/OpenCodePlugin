@@ -174,17 +174,26 @@ describe("runChecks", () => {
     expect(check.ok).toBe(false)
   })
 
-  it("runs all seven checks in fixed order", async () => {
+  it("runs all eight checks in fixed order", async () => {
     const results = await run(ctx())
     expect(results.map((r) => r.id)).toEqual([
       "plugin-registered",
       "config-file",
       "plugin-tools",
+      "opencode-compat",
       "delegate-binaries",
       "cli-authenticated",
       "writability-probe",
       "slash-commands",
     ])
+  })
+
+  it("opencode-compat check is present and never crashes without opencode", async () => {
+    const results = await run(ctx({ pathEnv: "" }))
+    const compat = results.find((r) => r.id === "opencode-compat")
+    expect(compat).toBeDefined()
+    expect(compat!.ok).toBe(true)
+    expect(compat!.detail).toContain("skipped")
   })
 
   it("plugin-tools check passes and lists delegate tools", async () => {

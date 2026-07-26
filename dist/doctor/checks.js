@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, readdirSync, accessSync, constants, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { join, delimiter, isAbsolute } from "path";
 import { tmpdir } from "os";
+import { spawnSync } from "child_process";
+import { fileURLToPath } from "url";
 import { loadConfig, getConfigSearchPaths, DEFAULT_CONFIG } from "../config";
 import { checkDelegate } from "../health-check";
 import { generateCommands, GENERATED_MARKER } from "../commands";
@@ -76,6 +78,33 @@ async function checkPluginTools(ctx, config) {
     finally {
         rmSync(tmp, { recursive: true, force: true });
     }
+}
+function ownPackageJsonPath() {
+    return fileURLToPath(new URL("../../package.json", import.meta.url));
+}
+function checkOpencodeCompat(ctx) {
+    if (!which("opencode", ctx.pathEnv)) {
+        return { id: "opencode-compat", label: "OpenCode compatibility", ok: true, detail: "opencode not on PATH; skipped" };
+    }
+    const res = spawnSync("opencode", ["--version"], { encoding: "utf-8" });
+    const opencodeVersion = (res.stdout ?? "").trim();
+    if (!/^\d+\.\d+\.\d+/.test(opencodeVersion)) {
+        return { id: "opencode-compat", label: "OpenCode compatibility", ok: true, detail: `could not parse opencode version (${opencodeVersion}); skipped` };
+    }
+    const pkg = JSON.parse(readFileSync(ownPackageJsonPath(), "utf-8"));
+    const supported = pkg.devDependencies?.["@opencode-ai/plugin"] ?? "";
+    const [oMaj, oMin] = opencodeVersion.split(".");
+    const [sMaj, sMin] = supported.replace(/^[^\d]*/, "").split(".");
+    if (oMaj === sMaj && oMin === sMin) {
+        return { id: "opencode-compat", label: "OpenCode compatibility", ok: true, detail: `opencode ${opencodeVersion} matches plugin API ${supported}` };
+    }
+    return {
+        id: "opencode-compat",
+        label: "OpenCode compatibility",
+        ok: false,
+        detail: `opencode ${opencodeVersion} vs plugin API ${supported} (minor mismatch)`,
+        fixHint: `Align the devDependency: set "@opencode-ai/plugin" to "${opencodeVersion}" in package.json, run bun install && bun run build, then restart opencode.`,
+    };
 }
 function checkConfigFile(ctx) {
     const found = resolveConfigPath(ctx);
@@ -265,6 +294,7 @@ export async function runChecks(ctx, run) {
     }
     results.push(configOutcome);
     results.push(await safe("plugin-tools", "Plugin tools", () => checkPluginTools(ctx, config)));
+    results.push(await safe("opencode-compat", "OpenCode compatibility", () => checkOpencodeCompat(ctx)));
     results.push(await safe("delegate-binaries", "Delegate binaries", () => checkBinaries(config, ctx)));
     results.push(await safe("cli-authenticated", "CLI authentication", () => checkAuthenticated(config, ctx)));
     results.push(await safe("writability-probe", "Writability probe", () => checkWritability(config, run)));
