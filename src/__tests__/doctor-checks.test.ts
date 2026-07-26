@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test"
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test"
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
@@ -195,6 +195,18 @@ describe("runChecks", () => {
     expect(tools!.detail).toContain("claude_start")
     expect(tools!.detail).toContain("claude_reply")
     expect(tools!.detail).toContain("claude_check")
+  })
+
+  it("does not write generated commands into the user's commands dir", async () => {
+    const realOs = await import("os")
+    mock.module("os", () => ({ ...realOs, homedir: () => home }))
+    try {
+      const results = await run(ctx())
+      expect(byId(results, "plugin-tools").ok).toBe(true)
+      expect(existsSync(join(home, ".config", "opencode", "commands"))).toBe(false)
+    } finally {
+      mock.restore()
+    }
   })
 
   it("preserves the check id and label when a check throws", async () => {

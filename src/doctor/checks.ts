@@ -69,19 +69,24 @@ function checkPluginRegistered(ctx: DoctorContext): CheckResult {
 async function checkPluginTools(ctx: DoctorContext, config: CliDispatchConfig): Promise<CheckResult> {
   const { createCliDispatchPlugin } = await import("../index.js")
   const configPath = resolveConfigPath(ctx)
-  const hooks = await createCliDispatchPlugin(configPath)({} as Parameters<ReturnType<typeof createCliDispatchPlugin>>[0])
-  const registered = Object.keys(hooks.tool ?? {})
-  const expected = Object.keys(config.delegates).flatMap((n) => [`${n}_start`, `${n}_reply`, `${n}_check`])
-  const missing = expected.filter((t) => !registered.includes(t))
-  if (missing.length === 0) {
-    return { id: "plugin-tools", label: "Plugin tools", ok: true, detail: `registered: ${registered.join(", ")}` }
-  }
-  return {
-    id: "plugin-tools",
-    label: "Plugin tools",
-    ok: false,
-    detail: `tools missing after simulated load: ${missing.join(", ")}`,
-    fixHint: "Rebuild the plugin (bun run build) and re-run doctor. If it persists, check that dist/ is up to date with src/.",
+  const tmp = mkdtempSync(join(tmpdir(), "cli-dispatch-doctor-plugin-"))
+  try {
+    const hooks = await createCliDispatchPlugin(configPath, { commandsDir: tmp })({} as Parameters<ReturnType<typeof createCliDispatchPlugin>>[0])
+    const registered = Object.keys(hooks.tool ?? {})
+    const expected = Object.keys(config.delegates).flatMap((n) => [`${n}_start`, `${n}_reply`, `${n}_check`])
+    const missing = expected.filter((t) => !registered.includes(t))
+    if (missing.length === 0) {
+      return { id: "plugin-tools", label: "Plugin tools", ok: true, detail: `registered: ${registered.join(", ")}` }
+    }
+    return {
+      id: "plugin-tools",
+      label: "Plugin tools",
+      ok: false,
+      detail: `tools missing after simulated load: ${missing.join(", ")}`,
+      fixHint: "Rebuild the plugin (bun run build) and re-run doctor. If it persists, check that dist/ is up to date with src/.",
+    }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
   }
 }
 

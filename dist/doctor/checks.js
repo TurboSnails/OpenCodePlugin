@@ -56,20 +56,26 @@ function checkPluginRegistered(ctx) {
 async function checkPluginTools(ctx, config) {
     const { createCliDispatchPlugin } = await import("../index.js");
     const configPath = resolveConfigPath(ctx);
-    const hooks = await createCliDispatchPlugin(configPath)({});
-    const registered = Object.keys(hooks.tool ?? {});
-    const expected = Object.keys(config.delegates).flatMap((n) => [`${n}_start`, `${n}_reply`, `${n}_check`]);
-    const missing = expected.filter((t) => !registered.includes(t));
-    if (missing.length === 0) {
-        return { id: "plugin-tools", label: "Plugin tools", ok: true, detail: `registered: ${registered.join(", ")}` };
+    const tmp = mkdtempSync(join(tmpdir(), "cli-dispatch-doctor-plugin-"));
+    try {
+        const hooks = await createCliDispatchPlugin(configPath, { commandsDir: tmp })({});
+        const registered = Object.keys(hooks.tool ?? {});
+        const expected = Object.keys(config.delegates).flatMap((n) => [`${n}_start`, `${n}_reply`, `${n}_check`]);
+        const missing = expected.filter((t) => !registered.includes(t));
+        if (missing.length === 0) {
+            return { id: "plugin-tools", label: "Plugin tools", ok: true, detail: `registered: ${registered.join(", ")}` };
+        }
+        return {
+            id: "plugin-tools",
+            label: "Plugin tools",
+            ok: false,
+            detail: `tools missing after simulated load: ${missing.join(", ")}`,
+            fixHint: "Rebuild the plugin (bun run build) and re-run doctor. If it persists, check that dist/ is up to date with src/.",
+        };
     }
-    return {
-        id: "plugin-tools",
-        label: "Plugin tools",
-        ok: false,
-        detail: `tools missing after simulated load: ${missing.join(", ")}`,
-        fixHint: "Rebuild the plugin (bun run build) and re-run doctor. If it persists, check that dist/ is up to date with src/.",
-    };
+    finally {
+        rmSync(tmp, { recursive: true, force: true });
+    }
 }
 function checkConfigFile(ctx) {
     const found = resolveConfigPath(ctx);
