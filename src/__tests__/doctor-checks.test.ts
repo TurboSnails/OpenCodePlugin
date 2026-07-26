@@ -174,6 +174,25 @@ describe("runChecks", () => {
     expect(check.ok).toBe(false)
   })
 
+  it("fails plugin-tools when no delegates are configured", async () => {
+    writeFileSync(join(cwd, "cli-dispatch.config.json"), JSON.stringify({ delegates: {} }))
+    const results = await run(ctx())
+    const tools = byId(results, "plugin-tools")
+    expect(tools.ok).toBe(false)
+    expect(tools.detail).toBe("no delegates configured")
+    expect(tools.fixHint).toContain("cli-dispatch.config.json")
+  })
+
+  it("opencode-compat reads the version of the opencode binary resolved via ctx.pathEnv", async () => {
+    const shim = join(bin, "opencode")
+    writeFileSync(shim, "#!/bin/sh\necho 0.0.0-testshim\n")
+    chmodSync(shim, 0o755)
+    const results = await run(ctx())
+    const compat = byId(results, "opencode-compat")
+    expect(compat.detail).toContain("0.0.0")
+    expect(compat.detail).not.toContain("skipped")
+  })
+
   it("runs all eight checks in fixed order", async () => {
     const results = await run(ctx())
     expect(results.map((r) => r.id)).toEqual([

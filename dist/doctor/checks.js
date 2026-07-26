@@ -63,6 +63,15 @@ async function checkPluginTools(ctx, config) {
         const hooks = await createCliDispatchPlugin(configPath, { commandsDir: tmp })({});
         const registered = Object.keys(hooks.tool ?? {});
         const expected = Object.keys(config.delegates).flatMap((n) => [`${n}_start`, `${n}_reply`, `${n}_check`]);
+        if (expected.length === 0) {
+            return {
+                id: "plugin-tools",
+                label: "Plugin tools",
+                ok: false,
+                detail: "no delegates configured",
+                fixHint: "Add at least one delegate to cli-dispatch.config.json (see docs/configuration.md), then re-run doctor.",
+            };
+        }
         const missing = expected.filter((t) => !registered.includes(t));
         if (missing.length === 0) {
             return { id: "plugin-tools", label: "Plugin tools", ok: true, detail: `registered: ${registered.join(", ")}` };
@@ -86,7 +95,11 @@ function checkOpencodeCompat(ctx) {
     if (!which("opencode", ctx.pathEnv)) {
         return { id: "opencode-compat", label: "OpenCode compatibility", ok: true, detail: "opencode not on PATH; skipped" };
     }
-    const res = spawnSync("opencode", ["--version"], { encoding: "utf-8" });
+    const res = spawnSync("opencode", ["--version"], {
+        encoding: "utf-8",
+        timeout: 5000,
+        env: { ...process.env, PATH: ctx.pathEnv },
+    });
     const opencodeVersion = (res.stdout ?? "").trim();
     if (!/^\d+\.\d+\.\d+/.test(opencodeVersion)) {
         return { id: "opencode-compat", label: "OpenCode compatibility", ok: true, detail: `could not parse opencode version (${opencodeVersion}); skipped` };
