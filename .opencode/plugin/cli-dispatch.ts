@@ -1,3 +1,3 @@
-import { createCliDispatchPlugin } from "../../src/index"
+import { createLocalCliDispatchPlugin } from "../../src/local-plugin"
 
-export default createCliDispatchPlugin()
+export default createLocalCliDispatchPlugin()
