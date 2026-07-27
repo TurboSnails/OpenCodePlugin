@@ -112,15 +112,19 @@ describe("generateCommands", () => {
     const claude = readFileSync(join(dir, "claude.md"), "utf-8")
     expect(claude).toContain("Tool availability check")
     expect(claude).toContain("claude_start")
-    expect(claude).toContain("restart opencode")
+    expect(claude).toContain("全新 opencode 会话")
+    expect(claude).toContain("不要 --continue / --session / resume")
+    expect(claude).not.toContain("restart opencode")
 
     const cc = readFileSync(join(dir, "cc.md"), "utf-8")
     expect(cc).toContain("Tool availability check")
     expect(cc).toContain("claude_start")
+    expect(cc).toContain("全新 opencode 会话")
 
     const codex = readFileSync(join(dir, "codex.md"), "utf-8")
     expect(codex).toContain("Tool availability check")
     expect(codex).toContain("codex_start")
+    expect(codex).toContain("全新 opencode 会话")
   })
 
   it("does not add the guard to the /opencode exit command", () => {

@@ -10,7 +10,7 @@ delegate: {{NAME}}
 
 ${GENERATED_MARKER}
 
-**Tool availability check (do this first):** if the \`{{NAME}}_start\` tool is not among your available tools, the cli-dispatch plugin is not loaded in this session (the session likely started before the plugin was installed or updated; the fix is to restart opencode so the plugin loads). Tell the user exactly this: "委派插件未加载：当前会话早于插件安装/更新，请退出并重启 opencode 后重试 /{{NAME}}。" Then stop — do not answer the delegated message yourself.
+**Tool availability check (do this first):** if the \`{{NAME}}_start\` tool is not among your available tools, the cli-dispatch plugin is not loaded in this session's tool snapshot (this conversation was resumed or started before the plugin was installed/updated). Tell the user exactly this: "委派插件未加载：当前会话工具快照早于插件安装/更新。请退出并启动全新 opencode 会话（不要 --continue / --session / resume；桌面 app 要完全 Quit），然后重试 /{{NAME}}。" Then stop — do not answer the delegated message yourself.
 
 Delegate this conversation to the {{NAME}} CLI.
 
