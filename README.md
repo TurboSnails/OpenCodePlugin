@@ -27,6 +27,14 @@ Slash commands (`/<delegate>`, `/cc`, `/opencode`) are written to `~/.config/ope
 
 **Stuck?** Run `npx opencode-cli-dispatch doctor` (or `cli-dispatch doctor --fix`) — it checks registration, config, binaries, authentication, writability, and slash commands, and tells you exactly what to fix.
 
+## After installing or updating
+
+opencode loads plugins once at startup. After installing or updating
+opencode-cli-dispatch (or regenerating slash commands), quit and restart
+opencode. Sessions started before an update won't have the
+`claude_start` / `codex_start` tools — `/cc` and `/codex` detect this and
+tell you to restart.
+
 Full docs: [Installation](docs/installation.md) · [Configuration](docs/configuration.md) · [Claude Code adapter](docs/claude-code-adapter.md) · [Codex adapter](docs/codex-adapter.md)
 
 ## Features

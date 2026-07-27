@@ -8,6 +8,10 @@
 
 完整快速上手步骤见 [README.md Quickstart](README.md#quickstart)。卡住了？运行 `npx opencode-cli-dispatch doctor`（或 `cli-dispatch doctor --fix`）自检。
 
+## 安装或更新之后
+
+opencode 只在启动时加载插件。安装或更新 opencode-cli-dispatch（或重新生成 slash 命令）后，请退出并重启 opencode。早于更新的会话不会有 `claude_start` / `codex_start` 工具——`/cc` 和 `/codex` 会检测到这一点并提示你重启。
+
 详细文档均为英文：[Installation](docs/installation.md) · [Configuration](docs/configuration.md) · [Claude Code adapter](docs/claude-code-adapter.md)
 
 ## 特性
