@@ -9,6 +9,7 @@ let root: string
 let home: string
 let cwd: string
 let bin: string
+let originalDev: string | undefined
 
 // Stub for the delegate runner so the writability probe never spawns a real CLI.
 const stubRun: any = async () => ({ text: "ok", externalId: "x" })
@@ -21,9 +22,12 @@ beforeEach(() => {
   mkdirSync(home, { recursive: true })
   mkdirSync(cwd, { recursive: true })
   mkdirSync(bin, { recursive: true })
+  originalDev = process.env.CLI_DISPATCH_DEV
 })
 
 afterEach(() => {
+  if (originalDev === undefined) delete process.env.CLI_DISPATCH_DEV
+  else process.env.CLI_DISPATCH_DEV = originalDev
   rmSync(root, { recursive: true, force: true })
 })
 
@@ -212,6 +216,7 @@ describe("runChecks", () => {
   })
 
   it("does not flag a dev-gated local wrapper when CLI_DISPATCH_DEV is unset", async () => {
+    delete process.env.CLI_DISPATCH_DEV
     mkdirSync(join(home, ".config", "opencode"), { recursive: true })
     writeFileSync(
       join(home, ".config", "opencode", "opencode.json"),
@@ -225,6 +230,25 @@ describe("runChecks", () => {
 
     const results = await run(ctx())
     expect(byId(results, "duplicate-plugin-registration").ok).toBe(true)
+  })
+
+  it("flags a dev-gated local wrapper as duplicate when CLI_DISPATCH_DEV=1", async () => {
+    process.env.CLI_DISPATCH_DEV = "1"
+    mkdirSync(join(home, ".config", "opencode"), { recursive: true })
+    writeFileSync(
+      join(home, ".config", "opencode", "opencode.json"),
+      JSON.stringify({ plugin: ["opencode-cli-dispatch@git+https://github.com/TurboSnails/OpenCodePlugin.git"] }),
+    )
+    mkdirSync(join(cwd, ".opencode", "plugin"), { recursive: true })
+    writeFileSync(
+      join(cwd, ".opencode", "plugin", "cli-dispatch.ts"),
+      'import { createLocalCliDispatchPlugin } from "../../src/local-plugin"\n\nexport default createLocalCliDispatchPlugin()\n',
+    )
+
+    const results = await run(ctx())
+    const check = byId(results, "duplicate-plugin-registration")
+    expect(check.ok).toBe(false)
+    expect(check.detail).toContain(".opencode/plugin/cli-dispatch.ts")
   })
 
   it("runs all nine checks in fixed order", async () => {
