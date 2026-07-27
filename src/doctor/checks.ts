@@ -6,7 +6,7 @@ import {
   loadConfigForContext,
   which,
 } from "./check-utils"
-import { checkPluginRegistered, checkConfigFile, checkOpencodeCompat, fixPluginRegistration } from "./env-checks"
+import { checkPluginRegistered, checkConfigFile, checkOpencodeCompat, fixPluginRegistration, checkDuplicatePluginRegistration, fixDuplicatePluginRegistration } from "./env-checks"
 import { checkBinaries, checkAuthenticated, checkWritability, checkPluginTools } from "./delegate-checks"
 import { checkSlashCommands, fixSlashCommands } from "./command-checks"
 
@@ -35,6 +35,7 @@ export async function runChecks(ctx: DoctorContext, run: RunDelegateFn): Promise
   }
 
   results.push(await safe("plugin-registered", "Plugin registered", () => checkPluginRegistered(ctx)))
+  results.push(await safe("duplicate-plugin-registration", "Duplicate plugin registration", () => checkDuplicatePluginRegistration(ctx)))
 
   const configOutcome = await safe("config-file", "Config file", () => checkConfigFile(ctx).result)
   // config needs to be loaded outside safe() so subsequent checks can use it
@@ -60,6 +61,7 @@ export function applyFixes(results: CheckResult[], ctx: DoctorContext): CheckRes
     if (r.ok) return r
     if (r.id === "slash-commands") return fixSlashCommands(r, ctx)
     if (r.id === "plugin-registered") return fixPluginRegistration(r, ctx)
+    if (r.id === "duplicate-plugin-registration") return fixDuplicatePluginRegistration(r, ctx)
     return r
   })
 }

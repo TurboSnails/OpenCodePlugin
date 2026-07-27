@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync, copyFileSync, renameSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
 import { PKG, resolveConfigPath, loadConfigForContext, ownPackageJsonPath, which } from "./check-utils";
@@ -37,6 +37,95 @@ export function checkPluginRegistered(ctx) {
         fixHint: `Add to opencode.json: { "plugin": ["${PKG}"] } — or create a wrapper file. ` +
             `Run "cli-dispatch doctor --fix" to patch an existing opencode.json automatically.`,
     };
+}
+function wrapperIsDevGated(text) {
+    return text.includes("CLI_DISPATCH_DEV") || text.includes("createLocalCliDispatchPlugin");
+}
+function wrapperIsActive(text) {
+    return wrapperIsDevGated(text) ? process.env.CLI_DISPATCH_DEV === "1" : true;
+}
+function isCliDispatchWrapper(text) {
+    return (text.includes(PKG) ||
+        text.includes("createCliDispatchPlugin") ||
+        text.includes("createLocalCliDispatchPlugin"));
+}
+export function checkDuplicatePluginRegistration(ctx) {
+    const configCandidates = [
+        join(ctx.cwd, "opencode.json"),
+        join(ctx.cwd, "opencode.jsonc"),
+        join(ctx.homeDir, ".config", "opencode", "opencode.json"),
+        join(ctx.homeDir, ".config", "opencode", "opencode.jsonc"),
+    ];
+    const declaredIn = configCandidates.find((path) => existsSync(path) && readFileSync(path, "utf-8").includes(PKG));
+    const wrapperDirs = [
+        join(ctx.cwd, ".opencode", "plugin"),
+        join(ctx.homeDir, ".config", "opencode", "plugins"),
+    ];
+    const activeWrappers = [];
+    const inactiveDevWrappers = [];
+    for (const dir of wrapperDirs) {
+        if (!existsSync(dir))
+            continue;
+        for (const file of readdirSync(dir)) {
+            if (!/\.(ts|js)$/.test(file))
+                continue;
+            const path = join(dir, file);
+            const text = readFileSync(path, "utf-8");
+            if (!isCliDispatchWrapper(text))
+                continue;
+            if (wrapperIsActive(text))
+                activeWrappers.push(path);
+            else
+                inactiveDevWrappers.push(path);
+        }
+    }
+    if (declaredIn && activeWrappers.length > 0) {
+        return {
+            id: "duplicate-plugin-registration",
+            label: "Duplicate plugin registration",
+            ok: false,
+            detail: `plugin is declared in ${declaredIn} and also loaded by wrapper(s): ${activeWrappers.join(", ")}`,
+            fixHint: "Keep one registration source. For this repo's old dogfood wrapper, run \"cli-dispatch doctor --fix\"; otherwise disable the wrapper or unset CLI_DISPATCH_DEV.",
+        };
+    }
+    if (declaredIn && inactiveDevWrappers.length > 0) {
+        return {
+            id: "duplicate-plugin-registration",
+            label: "Duplicate plugin registration",
+            ok: true,
+            detail: `dev-gated wrapper present but disabled: ${inactiveDevWrappers.join(", ")}`,
+        };
+    }
+    return {
+        id: "duplicate-plugin-registration",
+        label: "Duplicate plugin registration",
+        ok: true,
+        detail: "no duplicate registration",
+    };
+}
+export function fixDuplicatePluginRegistration(r, ctx) {
+    const pluginDir = join(ctx.cwd, ".opencode", "plugin");
+    if (!existsSync(pluginDir))
+        return r;
+    const disabled = [];
+    for (const file of readdirSync(pluginDir)) {
+        if (!/\.(ts|js)$/.test(file))
+            continue;
+        const path = join(pluginDir, file);
+        const text = readFileSync(path, "utf-8");
+        const isOldDogfoodWrapper = text.includes('from "../../src/index"') &&
+            text.includes("createCliDispatchPlugin") &&
+            !wrapperIsDevGated(text);
+        if (!isOldDogfoodWrapper)
+            continue;
+        copyFileSync(path, `${path}.bak`);
+        renameSync(path, `${path}.disabled`);
+        disabled.push(path);
+    }
+    if (disabled.length === 0) {
+        return { ...r, detail: `${r.detail} (no old always-on dogfood wrapper found to disable — apply the fixHint manually)` };
+    }
+    return { ...r, ok: true, detail: `disabled old dogfood wrapper(s): ${disabled.join(", ")}` };
 }
 export function checkOpencodeCompat(ctx) {
     if (!which("opencode", ctx.pathEnv)) {

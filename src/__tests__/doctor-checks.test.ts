@@ -193,10 +193,45 @@ describe("runChecks", () => {
     expect(compat.detail).not.toContain("skipped")
   })
 
-  it("runs all eight checks in fixed order", async () => {
+  it("fails duplicate-plugin-registration when global config and an always-on local wrapper both load the plugin", async () => {
+    mkdirSync(join(home, ".config", "opencode"), { recursive: true })
+    writeFileSync(
+      join(home, ".config", "opencode", "opencode.json"),
+      JSON.stringify({ plugin: ["opencode-cli-dispatch@git+https://github.com/TurboSnails/OpenCodePlugin.git"] }),
+    )
+    mkdirSync(join(cwd, ".opencode", "plugin"), { recursive: true })
+    writeFileSync(
+      join(cwd, ".opencode", "plugin", "cli-dispatch.ts"),
+      'import { createCliDispatchPlugin } from "../../src/index"\n\nexport default createCliDispatchPlugin()\n',
+    )
+
+    const results = await run(ctx())
+    const check = byId(results, "duplicate-plugin-registration")
+    expect(check.ok).toBe(false)
+    expect(check.detail).toContain(".opencode/plugin/cli-dispatch.ts")
+  })
+
+  it("does not flag a dev-gated local wrapper when CLI_DISPATCH_DEV is unset", async () => {
+    mkdirSync(join(home, ".config", "opencode"), { recursive: true })
+    writeFileSync(
+      join(home, ".config", "opencode", "opencode.json"),
+      JSON.stringify({ plugin: ["opencode-cli-dispatch@git+https://github.com/TurboSnails/OpenCodePlugin.git"] }),
+    )
+    mkdirSync(join(cwd, ".opencode", "plugin"), { recursive: true })
+    writeFileSync(
+      join(cwd, ".opencode", "plugin", "cli-dispatch.ts"),
+      'import { createLocalCliDispatchPlugin } from "../../src/local-plugin"\n\nexport default createLocalCliDispatchPlugin()\n',
+    )
+
+    const results = await run(ctx())
+    expect(byId(results, "duplicate-plugin-registration").ok).toBe(true)
+  })
+
+  it("runs all nine checks in fixed order", async () => {
     const results = await run(ctx())
     expect(results.map((r) => r.id)).toEqual([
       "plugin-registered",
+      "duplicate-plugin-registration",
       "config-file",
       "plugin-tools",
       "opencode-compat",
@@ -330,6 +365,30 @@ describe("applyFixes", () => {
     const fixed = byId(results, "plugin-registered")
     expect(fixed.ok).toBe(false)
     expect(fixed.detail).toContain("unsupported JSONC structure")
+  })
+
+  it("disables an old always-on dogfood wrapper after backing it up", async () => {
+    mkdirSync(join(home, ".config", "opencode"), { recursive: true })
+    writeFileSync(
+      join(home, ".config", "opencode", "opencode.json"),
+      JSON.stringify({ plugin: ["opencode-cli-dispatch@git+https://github.com/TurboSnails/OpenCodePlugin.git"] }),
+    )
+    const pluginDir = join(cwd, ".opencode", "plugin")
+    mkdirSync(pluginDir, { recursive: true })
+    const wrapper = join(pluginDir, "cli-dispatch.ts")
+    writeFileSync(
+      wrapper,
+      'import { createCliDispatchPlugin } from "../../src/index"\n\nexport default createCliDispatchPlugin()\n',
+    )
+
+    const results = await run(ctx())
+    const fixed = applyFixes(results, ctx())
+    const check = byId(fixed, "duplicate-plugin-registration")
+
+    expect(check.ok).toBe(true)
+    expect(existsSync(`${wrapper}.bak`)).toBe(true)
+    expect(existsSync(`${wrapper}.disabled`)).toBe(true)
+    expect(existsSync(wrapper)).toBe(false)
   })
 
   it("leaves passing results unchanged", () => {
