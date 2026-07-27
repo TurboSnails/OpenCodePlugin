@@ -343,3 +343,41 @@ describe("applyFixes", () => {
     expect(byId(results, "delegate-binaries")).toEqual(passing)
   })
 })
+
+describe("failure branches", () => {
+  it("plugin-tools fails loudly when delegate tools are missing after simulated load", async () => {
+    writeFileSync(join(cwd, "cli-dispatch.config.json"), JSON.stringify({
+      delegates: {
+        claude: { binary: "claude", parser: "claude", startArgs: ["{prompt}"], replyArgs: ["{prompt}"] },
+      },
+    }))
+    const { checkPluginTools } = await import("../doctor/delegate-checks")
+    const config = { delegates: { claude: { binary: "claude", parser: "claude" as const, startArgs: ["{prompt}"], replyArgs: ["{prompt}"] } } }
+    const result = await checkPluginTools(ctx(), config, async () => ["claude_start"])
+    expect(result.ok).toBe(false)
+    expect(result.detail).toContain("claude_reply")
+    expect(result.detail).toContain("claude_check")
+    expect(result.fixHint).toContain("bun run build")
+  })
+
+  it("opencode-compat fails with fixHint when opencode minor version differs", async () => {
+    const path = join(bin, "opencode")
+    writeFileSync(path, "#!/bin/sh\necho 9.9.9\n")
+    chmodSync(path, 0o755)
+    const results = await run(ctx())
+    const compat = byId(results, "opencode-compat")
+    expect(compat.ok).toBe(false)
+    expect(compat.detail).toContain("9.9.9")
+    expect(compat.fixHint).toContain("@opencode-ai/plugin")
+  })
+
+  it("opencode-compat skips gracefully on unparseable opencode output", async () => {
+    const path = join(bin, "opencode")
+    writeFileSync(path, "#!/bin/sh\necho garbage\n")
+    chmodSync(path, 0o755)
+    const results = await run(ctx())
+    const compat = byId(results, "opencode-compat")
+    expect(compat.ok).toBe(true)
+    expect(compat.detail).toContain("skipped")
+  })
+})
