@@ -380,4 +380,16 @@ describe("failure branches", () => {
     expect(compat.ok).toBe(true)
     expect(compat.detail).toContain("skipped")
   })
+
+  it("plugin-tools simulated load uses the passed config, not ambient search paths", async () => {
+    const { checkPluginTools } = await import("../doctor/delegate-checks")
+    const config = {
+      delegates: {
+        ghost: { binary: "ghost", parser: "raw" as const, startArgs: ["--", "{prompt}"], replyArgs: ["--", "{prompt}"] },
+      },
+    }
+    const result = await checkPluginTools(ctx(), config)
+    expect(result.ok).toBe(true)
+    expect(result.detail).toContain("ghost_start")
+  })
 })

@@ -1,16 +1,17 @@
-import { existsSync, mkdtempSync, rmSync } from "fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { checkDelegate } from "../health-check";
-import { resolveConfigPath, which } from "./check-utils";
+import { which } from "./check-utils";
 export async function checkPluginTools(ctx, config, loadTools) {
     const registered = loadTools
         ? await loadTools()
         : await (async () => {
             const { createCliDispatchPlugin } = await import("../index.js");
-            const configPath = resolveConfigPath(ctx);
             const tmp = mkdtempSync(join(tmpdir(), "cli-dispatch-doctor-plugin-"));
             try {
+                const configPath = join(tmp, "config.json");
+                writeFileSync(configPath, JSON.stringify(config));
                 const hooks = await createCliDispatchPlugin(configPath, { commandsDir: tmp })({});
                 return Object.keys(hooks.tool ?? {});
             }

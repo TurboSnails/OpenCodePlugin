@@ -1,10 +1,10 @@
-import { existsSync, mkdtempSync, rmSync } from "fs"
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import type { CliDispatchConfig } from "../config"
 import { checkDelegate, type RunDelegateFn } from "../health-check"
 import type { DoctorContext } from "./context"
-import { type CheckResult, resolveConfigPath, which } from "./check-utils"
+import { type CheckResult, which } from "./check-utils"
 
 export async function checkPluginTools(
   ctx: DoctorContext,
@@ -15,9 +15,10 @@ export async function checkPluginTools(
     ? await loadTools()
     : await (async () => {
         const { createCliDispatchPlugin } = await import("../index.js")
-        const configPath = resolveConfigPath(ctx)
         const tmp = mkdtempSync(join(tmpdir(), "cli-dispatch-doctor-plugin-"))
         try {
+          const configPath = join(tmp, "config.json")
+          writeFileSync(configPath, JSON.stringify(config))
           const hooks = await createCliDispatchPlugin(configPath, { commandsDir: tmp })(
             {} as Parameters<ReturnType<typeof createCliDispatchPlugin>>[0],
           )
