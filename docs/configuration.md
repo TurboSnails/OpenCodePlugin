@@ -122,6 +122,8 @@ The plugin generates one slash command per configured delegate, named `/<delegat
 
 While a delegation is active, subsequent input in that session — plain messages, other slash commands, `@agent` mentions — is forwarded to the active delegate as prompt text on a **best-effort** basis, until `/opencode` is run. This relies on the model calling the delegate's reply tool; the plugin cannot force that call, but it does detect a turn that didn't make it and disconnects the delegation with a visible notice rather than leaving it silently active (see [Known limitations](#known-limitations)). If a delegate call fails, the error is returned in-chat as a reminder to run `/opencode`; the delegation itself stays active so you can retry or fix the underlying issue.
 
+After installing or updating the plugin, start a brand-new OpenCode session. Resumed sessions keep the tool snapshot from when they were created and may not have `{name}_start` / `{name}_reply` even though the slash commands exist.
+
 ### Timeout and cancellation
 
 Each delegate run is bounded by a 10-minute timeout by default, overridable per delegate via `timeoutMs` in the config. Cancelling the tool call in OpenCode (Esc) terminates the delegate subprocess immediately and reports `cancelled by user`, which is distinguishable from a timeout or a crash. Termination sends SIGTERM first and escalates to SIGKILL after a 2-second grace period.

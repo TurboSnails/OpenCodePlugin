@@ -30,10 +30,11 @@ Slash commands (`/<delegate>`, `/cc`, `/opencode`) are written to `~/.config/ope
 ## After installing or updating
 
 opencode loads plugins once at startup. After installing or updating
-opencode-cli-dispatch (or regenerating slash commands), quit and restart
-opencode. Sessions started before an update won't have the
-`claude_start` / `codex_start` tools — `/cc` and `/codex` detect this and
-tell you to restart.
+opencode-cli-dispatch (or regenerating slash commands), quit the current
+session and start a **brand-new** opencode session. Do not resume with
+`--continue` / `--session`: resumed sessions keep the old tool snapshot and
+won't have the newly registered `claude_start` / `codex_start` tools. `/cc`
+and `/codex` detect this and tell you to start a fresh session.
 
 Full docs: [Installation](docs/installation.md) · [Configuration](docs/configuration.md) · [Claude Code adapter](docs/claude-code-adapter.md) · [Codex adapter](docs/codex-adapter.md)
 
