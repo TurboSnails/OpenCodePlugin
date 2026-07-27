@@ -43,7 +43,13 @@ opencode. Sessions started before an update won't have the
 tell you to restart.
 ```
 
-同时检查 `README_CN.md` 对应位置补一行中文等价说明。
+同时检查 `README_CN.md` 对应位置补中文等价小节，文案：
+
+```markdown
+## 安装或更新之后
+
+opencode 只在启动时加载插件。安装或更新 opencode-cli-dispatch（或重新生成 slash 命令）后，请退出并重启 opencode。早于更新的会话不会有 `claude_start` / `codex_start` 工具——`/cc` 和 `/codex` 会检测到这一点并提示你重启。
+```
 
 ### 3. `checkOpencodeCompat` Windows shim 解析（minor）
 
