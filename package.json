@@ -19,6 +19,7 @@
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "test": "bun test",
+    "test:dev": "CLI_DISPATCH_DEV=1 bun test",
     "test:isolated": "HOME=$(mktemp -d) bun test",
     "prepare": "bun run build"
   },

@@ -95,3 +95,5 @@ Once published to npm, this simplifies to `"plugin": ["opencode-cli-dispatch"]`.
 **2. The slash commands are written automatically.** `createCliDispatchPlugin()` writes the generated command files to `~/.config/opencode/commands/` by default on every plugin load, so the global copy step is normally not needed. If you want project-local commands instead, use the `commandsDir` option in a thin wrapper.
 
 **3. Start a fresh session after install/update.** OpenCode loads plugins once at startup, so a resumed session (`--continue`, `--session`, desktop session restore) keeps the old tool snapshot. After changing the plugin or its generated commands, fully quit and start a brand-new session before using `/cc` or `/codex`.
+
+**Config lookup is still per project.** Even with a global install, `cli-dispatch.config.json` is resolved from the project you open (`./cli-dispatch.config.json`, then `./.opencode/...`, then `~/.config/opencode/cli-dispatch.config.json`). With no config file, the plugin uses the built-in `claude` + `codex` defaults.

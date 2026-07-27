@@ -100,7 +100,7 @@ export function checkDuplicatePluginRegistration(ctx: DoctorContext): CheckResul
       id: "duplicate-plugin-registration",
       label: "Duplicate plugin registration",
       ok: true,
-      detail: `dev-gated wrapper present but disabled: ${inactiveDevWrappers.join(", ")}`,
+      detail: `dev-gated wrapper present but disabled (evaluated against this doctor process's env): ${inactiveDevWrappers.join(", ")}`,
     }
   }
 

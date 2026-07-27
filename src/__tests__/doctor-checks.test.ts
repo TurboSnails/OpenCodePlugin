@@ -229,7 +229,9 @@ describe("runChecks", () => {
     )
 
     const results = await run(ctx())
-    expect(byId(results, "duplicate-plugin-registration").ok).toBe(true)
+    const check = byId(results, "duplicate-plugin-registration")
+    expect(check.ok).toBe(true)
+    expect(check.detail).toContain("this doctor process's env")
   })
 
   it("flags a dev-gated local wrapper as duplicate when CLI_DISPATCH_DEV=1", async () => {
