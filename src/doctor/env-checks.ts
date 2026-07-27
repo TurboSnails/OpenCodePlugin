@@ -49,6 +49,7 @@ export function checkOpencodeCompat(ctx: DoctorContext): CheckResult {
     encoding: "utf-8",
     timeout: 5000,
     env: { ...process.env, PATH: ctx.pathEnv },
+    shell: process.platform === "win32",
   })
   const opencodeVersion = (res.stdout ?? "").trim()
   if (!/^\d+\.\d+\.\d+/.test(opencodeVersion)) {
