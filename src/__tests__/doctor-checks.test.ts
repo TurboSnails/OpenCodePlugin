@@ -322,6 +322,59 @@ describe("runChecks", () => {
     expect(byId(results, "server-load-manifest").detail).toContain("doctor process env")
   })
 
+  it("fails server-load-manifest with a fix hint when the manifest version differs from the doctor package", async () => {
+    const { manifestPath } = await import("../load-manifest")
+    mkdirSync(join(home, ".local", "share", "opencode", "cli-dispatch"), { recursive: true })
+    writeFileSync(
+      manifestPath(cwd, home),
+      JSON.stringify({
+        version: "0.0.0-different",
+        pid: process.pid,
+        cwd,
+        loadedAt: new Date().toISOString(),
+        cliDispatchDev: false,
+        delegates: [],
+        tools: [],
+        commandsDir: "",
+      }),
+    )
+
+    const results = await run(ctx())
+    const check = byId(results, "server-load-manifest")
+    expect(check.ok).toBe(false)
+    expect(check.detail).toContain("0.0.0-different")
+    expect(check.fixHint).toContain("brand-new opencode session")
+  })
+
+  it("uses a fresh server manifest with cliDispatchDev=false over a dev doctor process env", async () => {
+    process.env.CLI_DISPATCH_DEV = "1"
+    mkdirSync(join(home, ".config", "opencode"), { recursive: true })
+    writeFileSync(
+      join(home, ".config", "opencode", "opencode.json"),
+      JSON.stringify({ plugin: ["opencode-cli-dispatch@git+https://github.com/TurboSnails/OpenCodePlugin.git"] }),
+    )
+    mkdirSync(join(cwd, ".opencode", "plugin"), { recursive: true })
+    writeFileSync(
+      join(cwd, ".opencode", "plugin", "cli-dispatch.ts"),
+      'import { createLocalCliDispatchPlugin } from "../../src/local-plugin"\n\nexport default createLocalCliDispatchPlugin()\n',
+    )
+    const { writeLoadManifest } = await import("../load-manifest")
+    delete process.env.CLI_DISPATCH_DEV
+    writeLoadManifest({
+      config: { delegates: {} },
+      tools: ["claude_start"],
+      commandsDir: join(home, ".config", "opencode", "commands"),
+      cwd,
+      homeDir: home,
+    })
+    process.env.CLI_DISPATCH_DEV = "1"
+
+    const results = await run(ctx())
+    const check = byId(results, "duplicate-plugin-registration")
+    expect(check.ok).toBe(true)
+    expect(check.detail).toContain("server manifest")
+  })
+
   it("opencode-compat check is present and never crashes without opencode", async () => {
     const results = await run(ctx({ pathEnv: "" }))
     const compat = results.find((r) => r.id === "opencode-compat")

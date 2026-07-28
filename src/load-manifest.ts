@@ -92,7 +92,11 @@ export function readLoadManifest(ctx: LoadManifestContext): LoadManifest | undef
   }
 }
 
+const MANIFEST_TTL_MS = 24 * 60 * 60 * 1000
+
 export function isManifestFresh(manifest: LoadManifest | undefined, ctx: LoadManifestContext): manifest is LoadManifest {
   if (!manifest || manifest.cwd !== ctx.cwd) return false
+  const loadedAtMs = Date.parse(manifest.loadedAt)
+  if (Number.isNaN(loadedAtMs) || Date.now() - loadedAtMs > MANIFEST_TTL_MS) return false
   return pidAlive(manifest.pid)
 }

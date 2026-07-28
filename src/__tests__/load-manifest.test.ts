@@ -72,6 +72,30 @@ describe("load manifest", () => {
     expect(isManifestFresh(stale, { cwd, homeDir: home })).toBe(false)
   })
 
+  it("treats a manifest older than 24h as stale even with a live pid", () => {
+    const manifest = writeLoadManifest({
+      config: config(),
+      tools: ["claude_start"],
+      commandsDir: join(home, "commands"),
+      cwd,
+      homeDir: home,
+    })
+    const old: LoadManifest = { ...manifest, loadedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() }
+    expect(isManifestFresh(old, { cwd, homeDir: home })).toBe(false)
+  })
+
+  it("treats a manifest with an invalid loadedAt as stale even with a live pid", () => {
+    const manifest = writeLoadManifest({
+      config: config(),
+      tools: ["claude_start"],
+      commandsDir: join(home, "commands"),
+      cwd,
+      homeDir: home,
+    })
+    const invalid: LoadManifest = { ...manifest, loadedAt: "not a date" }
+    expect(isManifestFresh(invalid, { cwd, homeDir: home })).toBe(false)
+  })
+
   it("returns undefined for missing, wrong-cwd, or malformed manifests", () => {
     expect(readLoadManifest({ cwd, homeDir: home })).toBeUndefined()
 
