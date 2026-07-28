@@ -7,6 +7,7 @@ import { makeCheckTool } from "./health-check";
 import { makeDoctorTool } from "./doctor/tool";
 import { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore, makeSessionIdle } from "./hooks";
 import { generateCommands } from "./commands";
+import { writeLoadManifest } from "./load-manifest";
 export { loadConfig, resolveArgs } from "./config";
 export { makeStartTool, makeReplyTool } from "./delegate-tools";
 export { makeSystemTransform, makeChatMessage, makeCommandBefore, makeToolExecuteBefore, makeSessionIdle } from "./hooks";
@@ -21,9 +22,9 @@ export function createCliDispatchPlugin(configPath, options) {
     return async (input) => {
         let tools;
         let config;
+        const commandsDir = options?.commandsDir ?? join(homedir(), ".config", "opencode", "commands");
         try {
             config = loadConfig(configPath);
-            const commandsDir = options?.commandsDir ?? join(homedir(), ".config", "opencode", "commands");
             try {
                 generateCommands(config, commandsDir);
             }
@@ -47,6 +48,12 @@ export function createCliDispatchPlugin(configPath, options) {
             // delegate tools were registered instead of hitting "tool not found".
             config = { delegates: {} };
             tools = { cli_dispatch_status: makeStatusTool(err), cli_dispatch_doctor: makeDoctorTool() };
+        }
+        try {
+            writeLoadManifest({ config, tools: Object.keys(tools), commandsDir, configPath });
+        }
+        catch (err) {
+            console.warn(`[cli-dispatch] could not write load manifest: ${err instanceof Error ? err.message : String(err)}`);
         }
         return {
             tool: tools,

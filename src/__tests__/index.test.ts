@@ -101,6 +101,32 @@ describe("createCliDispatchPlugin", () => {
     expect(output).toMatch(/fix|edit|restart/i)
   })
 
+  it("warns but still loads when writing the load manifest fails", async () => {
+    const badHome = join(TEST_DIR, "bad-home")
+    writeFileSync(badHome, "not a dir")
+    const configPath = join(TEST_DIR, "config.json")
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        delegates: {
+          myagent: { binary: "myagent", parser: "raw", startArgs: ["--", "{prompt}"], replyArgs: ["--", "{prompt}"] },
+        },
+      }),
+    )
+
+    const realOs = await import("os")
+    const warn = spyOn(console, "warn").mockImplementation(() => {})
+    mock.module("os", () => ({ ...realOs, homedir: () => badHome }))
+    try {
+      const hooks = await createCliDispatchPlugin(configPath, { commandsDir: join(TEST_DIR, "commands") })({} as any)
+      expect(Object.keys(hooks.tool!)).toContain("myagent_start")
+      expect(warn).toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+      mock.restore()
+    }
+  })
+
   it("defaults commandsDir to ~/.config/opencode/commands when no option is given", async () => {
     const fakeHome = mkdtempSync(join(tmpdir(), "cli-dispatch-homedir-test-"))
     const configPath = join(TEST_DIR, "config.json")
