@@ -11,8 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - run: bun install
       - run: bun test
+      - run: bun run test:dev
+      - run: bun run test:isolated
       - run: bun run build
       - name: dist must be in sync with src
         run: git diff --exit-code dist/
