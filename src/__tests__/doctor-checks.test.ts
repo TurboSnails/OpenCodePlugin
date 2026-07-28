@@ -231,7 +231,36 @@ describe("runChecks", () => {
     const results = await run(ctx())
     const check = byId(results, "duplicate-plugin-registration")
     expect(check.ok).toBe(true)
-    expect(check.detail).toContain("this doctor process's env")
+    expect(check.detail).toContain("doctor process env")
+  })
+
+  it("uses a fresh server manifest over the doctor process env for dev-gated wrappers", async () => {
+    delete process.env.CLI_DISPATCH_DEV
+    mkdirSync(join(home, ".config", "opencode"), { recursive: true })
+    writeFileSync(
+      join(home, ".config", "opencode", "opencode.json"),
+      JSON.stringify({ plugin: ["opencode-cli-dispatch@git+https://github.com/TurboSnails/OpenCodePlugin.git"] }),
+    )
+    mkdirSync(join(cwd, ".opencode", "plugin"), { recursive: true })
+    writeFileSync(
+      join(cwd, ".opencode", "plugin", "cli-dispatch.ts"),
+      'import { createLocalCliDispatchPlugin } from "../../src/local-plugin"\n\nexport default createLocalCliDispatchPlugin()\n',
+    )
+    const { writeLoadManifest } = await import("../load-manifest")
+    process.env.CLI_DISPATCH_DEV = "1"
+    writeLoadManifest({
+      config: { delegates: {} },
+      tools: ["claude_start"],
+      commandsDir: join(home, ".config", "opencode", "commands"),
+      cwd,
+      homeDir: home,
+    })
+    delete process.env.CLI_DISPATCH_DEV
+
+    const results = await run(ctx())
+    const check = byId(results, "duplicate-plugin-registration")
+    expect(check.ok).toBe(false)
+    expect(check.detail).toContain("server manifest")
   })
 
   it("flags a dev-gated local wrapper as duplicate when CLI_DISPATCH_DEV=1", async () => {
@@ -253,11 +282,12 @@ describe("runChecks", () => {
     expect(check.detail).toContain(".opencode/plugin/cli-dispatch.ts")
   })
 
-  it("runs all nine checks in fixed order", async () => {
+  it("runs all ten checks in fixed order", async () => {
     const results = await run(ctx())
     expect(results.map((r) => r.id)).toEqual([
       "plugin-registered",
       "duplicate-plugin-registration",
+      "server-load-manifest",
       "config-file",
       "plugin-tools",
       "opencode-compat",
@@ -266,6 +296,30 @@ describe("runChecks", () => {
       "writability-probe",
       "slash-commands",
     ])
+  })
+
+  it("falls back to the doctor process env when the server manifest is stale", async () => {
+    delete process.env.CLI_DISPATCH_DEV
+    mkdirSync(join(home, ".config", "opencode"), { recursive: true })
+    writeFileSync(
+      join(home, ".config", "opencode", "opencode.json"),
+      JSON.stringify({ plugin: ["opencode-cli-dispatch@git+https://github.com/TurboSnails/OpenCodePlugin.git"] }),
+    )
+    mkdirSync(join(cwd, ".opencode", "plugin"), { recursive: true })
+    writeFileSync(
+      join(cwd, ".opencode", "plugin", "cli-dispatch.ts"),
+      'import { createLocalCliDispatchPlugin } from "../../src/local-plugin"\n\nexport default createLocalCliDispatchPlugin()\n',
+    )
+    const { manifestPath } = await import("../load-manifest")
+    mkdirSync(join(home, ".local", "share", "opencode", "cli-dispatch"), { recursive: true })
+    writeFileSync(
+      manifestPath(cwd, home),
+      JSON.stringify({ version: "0.0.0", pid: 99999999, cwd, loadedAt: new Date().toISOString(), cliDispatchDev: true, delegates: [], tools: [], commandsDir: "" }),
+    )
+
+    const results = await run(ctx())
+    expect(byId(results, "duplicate-plugin-registration").detail).toContain("doctor process env")
+    expect(byId(results, "server-load-manifest").detail).toContain("doctor process env")
   })
 
   it("opencode-compat check is present and never crashes without opencode", async () => {

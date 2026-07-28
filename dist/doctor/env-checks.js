@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, copyFileSync, renameSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
+import { readLoadManifest, isManifestFresh } from "../load-manifest";
 import { PKG, resolveConfigPath, loadConfigForContext, ownPackageJsonPath, which } from "./check-utils";
 export function checkPluginRegistered(ctx) {
     const candidates = [
@@ -41,13 +42,50 @@ export function checkPluginRegistered(ctx) {
 function wrapperIsDevGated(text) {
     return text.includes("CLI_DISPATCH_DEV") || text.includes("createLocalCliDispatchPlugin");
 }
-function wrapperIsActive(text) {
-    return wrapperIsDevGated(text) ? process.env.CLI_DISPATCH_DEV === "1" : true;
+function wrapperIsActive(text, serverCliDispatchDev) {
+    if (!wrapperIsDevGated(text))
+        return true;
+    return serverCliDispatchDev ?? process.env.CLI_DISPATCH_DEV === "1";
 }
 function isCliDispatchWrapper(text) {
     return (text.includes(PKG) ||
         text.includes("createCliDispatchPlugin") ||
         text.includes("createLocalCliDispatchPlugin"));
+}
+function devGateSource(ctx) {
+    const manifest = readLoadManifest({ cwd: ctx.cwd, homeDir: ctx.homeDir });
+    if (isManifestFresh(manifest, { cwd: ctx.cwd, homeDir: ctx.homeDir })) {
+        return { serverCliDispatchDev: manifest.cliDispatchDev, source: `server manifest (cliDispatchDev=${manifest.cliDispatchDev})` };
+    }
+    const doctorDev = process.env.CLI_DISPATCH_DEV === "1";
+    return { source: `doctor process env (CLI_DISPATCH_DEV=${doctorDev})` };
+}
+export function checkServerLoadManifest(ctx) {
+    const manifest = readLoadManifest({ cwd: ctx.cwd, homeDir: ctx.homeDir });
+    if (!isManifestFresh(manifest, { cwd: ctx.cwd, homeDir: ctx.homeDir })) {
+        return {
+            id: "server-load-manifest",
+            label: "Server load manifest",
+            ok: true,
+            detail: "no fresh server manifest for this project; duplicate/env checks use doctor process env",
+        };
+    }
+    const pkg = JSON.parse(readFileSync(ownPackageJsonPath(), "utf-8"));
+    if (manifest.version !== pkg.version) {
+        return {
+            id: "server-load-manifest",
+            label: "Server load manifest",
+            ok: false,
+            detail: `server manifest version ${manifest.version} does not match doctor package ${pkg.version}`,
+            fixHint: "Start a brand-new opencode session so the server loads the same plugin version the doctor is checking.",
+        };
+    }
+    return {
+        id: "server-load-manifest",
+        label: "Server load manifest",
+        ok: true,
+        detail: `fresh server manifest: cliDispatchDev=${manifest.cliDispatchDev}, tools=${manifest.tools.join(", ")}`,
+    };
 }
 export function checkDuplicatePluginRegistration(ctx) {
     const configCandidates = [
@@ -61,6 +99,7 @@ export function checkDuplicatePluginRegistration(ctx) {
         join(ctx.cwd, ".opencode", "plugin"),
         join(ctx.homeDir, ".config", "opencode", "plugins"),
     ];
+    const { serverCliDispatchDev, source } = devGateSource(ctx);
     const activeWrappers = [];
     const inactiveDevWrappers = [];
     for (const dir of wrapperDirs) {
@@ -73,7 +112,7 @@ export function checkDuplicatePluginRegistration(ctx) {
             const text = readFileSync(path, "utf-8");
             if (!isCliDispatchWrapper(text))
                 continue;
-            if (wrapperIsActive(text))
+            if (wrapperIsActive(text, serverCliDispatchDev))
                 activeWrappers.push(path);
             else
                 inactiveDevWrappers.push(path);
@@ -84,8 +123,8 @@ export function checkDuplicatePluginRegistration(ctx) {
             id: "duplicate-plugin-registration",
             label: "Duplicate plugin registration",
             ok: false,
-            detail: `plugin is declared in ${declaredIn} and also loaded by wrapper(s): ${activeWrappers.join(", ")}`,
-            fixHint: "Keep one registration source. For this repo's old dogfood wrapper, run \"cli-dispatch doctor --fix\"; otherwise disable the wrapper or unset CLI_DISPATCH_DEV.",
+            detail: `plugin is declared in ${declaredIn} and also loaded by wrapper(s): ${activeWrappers.join(", ")} (dev-gate source: ${source})`,
+            fixHint: "Keep one registration source. For this repo's old dogfood wrapper, run \"cli-dispatch doctor --fix\"; otherwise disable the wrapper or unset CLI_DISPATCH_DEV in the opencode server environment.",
         };
     }
     if (declaredIn && inactiveDevWrappers.length > 0) {
@@ -93,14 +132,14 @@ export function checkDuplicatePluginRegistration(ctx) {
             id: "duplicate-plugin-registration",
             label: "Duplicate plugin registration",
             ok: true,
-            detail: `dev-gated wrapper present but disabled (evaluated against this doctor process's env): ${inactiveDevWrappers.join(", ")}`,
+            detail: `dev-gated wrapper present but disabled (dev-gate source: ${source}): ${inactiveDevWrappers.join(", ")}`,
         };
     }
     return {
         id: "duplicate-plugin-registration",
         label: "Duplicate plugin registration",
         ok: true,
-        detail: "no duplicate registration",
+        detail: `no duplicate registration (dev-gate source: ${source})`,
     };
 }
 export function fixDuplicatePluginRegistration(r, ctx) {

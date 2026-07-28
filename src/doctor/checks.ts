@@ -6,7 +6,7 @@ import {
   loadConfigForContext,
   which,
 } from "./check-utils"
-import { checkPluginRegistered, checkConfigFile, checkOpencodeCompat, fixPluginRegistration, checkDuplicatePluginRegistration, fixDuplicatePluginRegistration } from "./env-checks"
+import { checkPluginRegistered, checkConfigFile, checkOpencodeCompat, fixPluginRegistration, checkDuplicatePluginRegistration, fixDuplicatePluginRegistration, checkServerLoadManifest } from "./env-checks"
 import { checkBinaries, checkAuthenticated, checkWritability, checkPluginTools } from "./delegate-checks"
 import { checkSlashCommands, fixSlashCommands } from "./command-checks"
 
@@ -36,6 +36,7 @@ export async function runChecks(ctx: DoctorContext, run: RunDelegateFn): Promise
 
   results.push(await safe("plugin-registered", "Plugin registered", () => checkPluginRegistered(ctx)))
   results.push(await safe("duplicate-plugin-registration", "Duplicate plugin registration", () => checkDuplicatePluginRegistration(ctx)))
+  results.push(await safe("server-load-manifest", "Server load manifest", () => checkServerLoadManifest(ctx)))
 
   const configOutcome = await safe("config-file", "Config file", () => checkConfigFile(ctx).result)
   // config needs to be loaded outside safe() so subsequent checks can use it
