@@ -2,18 +2,12 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { validateDelegates, loadConfig } from "../config";
-const MODEL_PATTERN_RE = /^(\*|[\w.-]+\*?)$/;
+import { isValidVerifiedModelPattern, matchesVerifiedModel } from "../policy";
 export function isValidModelPattern(entry) {
-    return typeof entry === "string" && MODEL_PATTERN_RE.test(entry);
+    return isValidVerifiedModelPattern(entry, "bare");
 }
 export function matchesModelPattern(model, patterns) {
-    return patterns.some((pattern) => {
-        if (pattern === "*")
-            return true;
-        if (pattern.endsWith("*"))
-            return model.startsWith(pattern.slice(0, -1));
-        return model === pattern;
-    });
+    return matchesVerifiedModel(model, patterns);
 }
 function validateAdapterConfig(config) {
     if (typeof config !== "object" || config === null) {

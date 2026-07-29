@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "fs"
 import { join } from "path"
 import { homedir } from "os"
 import { validateDelegates, loadConfig, type DelegateConfig, type ValidationIssue } from "../config"
+import { isValidVerifiedModelPattern, matchesVerifiedModel } from "../policy"
 
 export interface CodexAdapterConfig {
   delegates: Record<string, DelegateConfig>
@@ -10,18 +11,12 @@ export interface CodexAdapterConfig {
   verifiedModels?: string[]
 }
 
-const MODEL_PATTERN_RE = /^(\*|[\w.-]+\*?)$/
-
 export function isValidModelPattern(entry: unknown): entry is string {
-  return typeof entry === "string" && MODEL_PATTERN_RE.test(entry)
+  return isValidVerifiedModelPattern(entry, "bare")
 }
 
 export function matchesModelPattern(model: string, patterns: string[]): boolean {
-  return patterns.some((pattern) => {
-    if (pattern === "*") return true
-    if (pattern.endsWith("*")) return model.startsWith(pattern.slice(0, -1))
-    return model === pattern
-  })
+  return matchesVerifiedModel(model, patterns)
 }
 
 function validateAdapterConfig(config: unknown): ValidationIssue[] {
