@@ -1,20 +1,12 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { validateDelegates } from "../config";
-// One or more word/dot/hyphen characters, optionally ending in a trailing "*"
-// wildcard (e.g. "claude-sonnet-5", "claude-*"), or a lone "*".
-const MODEL_PATTERN_RE = /^(\*|[\w.-]+\*?)$/;
+import { isValidVerifiedModelPattern, matchesVerifiedModel } from "../policy";
 export function isValidModelPattern(entry) {
-    return typeof entry === "string" && MODEL_PATTERN_RE.test(entry);
+    return isValidVerifiedModelPattern(entry, "bare");
 }
 export function matchesModelPattern(model, patterns) {
-    return patterns.some((pattern) => {
-        if (pattern === "*")
-            return true;
-        if (pattern.endsWith("*"))
-            return model.startsWith(pattern.slice(0, -1));
-        return model === pattern;
-    });
+    return matchesVerifiedModel(model, patterns);
 }
 const DEFAULT_CONFIG = {
     delegates: {

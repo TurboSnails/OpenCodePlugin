@@ -1,5 +1,6 @@
 import { buildRoutingRule } from "../routing-rule"
-import { matchesModelPattern, type ClaudeCodeAdapterConfig } from "./config"
+import { checkDelegationGate } from "../policy"
+import { type ClaudeCodeAdapterConfig } from "./config"
 import { getCurrentModel } from "./current-model"
 import { getActiveDelegate, clearActiveDelegate } from "./session-store"
 import { mcpToolName } from "./pretooluse-check"
@@ -50,14 +51,14 @@ export function decideUserPromptSubmit(
   const target = detectDelegateCommand(prompt, Object.keys(config.delegates))
   if (target) {
     const patterns = config.verifiedModels
-    if (!patterns || patterns.length === 0) return { kind: "none" }
     const model = input.transcript_path ? getCurrentModel(input.transcript_path) : undefined
-    if (!model) return { kind: "none" }
-    if (matchesModelPattern(model, patterns)) return { kind: "none" }
-    return {
-      kind: "block",
-      reason: `[cli-dispatch] The current model (${model}) is not on the verified-models allow-list for CLI delegation, so ${target} was not started. Switch to a verified model and try again.`,
-    }
+    const decision = checkDelegationGate({
+      target: { kind: "command", delegate: target },
+      model,
+      verifiedModels: patterns,
+      prefix: "[cli-dispatch]",
+    })
+    return decision.allow ? { kind: "none" } : { kind: "block", reason: decision.reason }
   }
 
   // Sticky routing: an active delegation with no recognized command prefix

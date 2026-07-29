@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from "fs"
 import { join } from "path"
 import { validateDelegates, type DelegateConfig, type ValidationIssue } from "../config"
+import { isValidVerifiedModelPattern, matchesVerifiedModel } from "../policy"
 
 export interface ClaudeCodeAdapterConfig {
   delegates: Record<string, DelegateConfig>
@@ -10,20 +11,12 @@ export interface ClaudeCodeAdapterConfig {
   verifiedModels?: string[]
 }
 
-// One or more word/dot/hyphen characters, optionally ending in a trailing "*"
-// wildcard (e.g. "claude-sonnet-5", "claude-*"), or a lone "*".
-const MODEL_PATTERN_RE = /^(\*|[\w.-]+\*?)$/
-
 export function isValidModelPattern(entry: unknown): entry is string {
-  return typeof entry === "string" && MODEL_PATTERN_RE.test(entry)
+  return isValidVerifiedModelPattern(entry, "bare")
 }
 
 export function matchesModelPattern(model: string, patterns: string[]): boolean {
-  return patterns.some((pattern) => {
-    if (pattern === "*") return true
-    if (pattern.endsWith("*")) return model.startsWith(pattern.slice(0, -1))
-    return model === pattern
-  })
+  return matchesVerifiedModel(model, patterns)
 }
 
 const DEFAULT_CONFIG: ClaudeCodeAdapterConfig = {
