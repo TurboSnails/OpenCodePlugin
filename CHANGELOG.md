@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 - 2026-07-27
+
+- Consolidate the verified-model gate and `GENERATED_MARKER` prompt-template rejection into one deep `src/policy.ts` delegation-gate module used by OpenCode, Claude Code adapter, and Codex adapter.
+
 ## 1.3.0 - 2026-07-27
 
 - Add a per-project server load manifest so `cli-dispatch doctor` can judge duplicate registration and `CLI_DISPATCH_DEV` state from the OpenCode server process, not just the doctor process.
