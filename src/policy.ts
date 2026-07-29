@@ -47,3 +47,75 @@ export function validateArgvInjection(name: string, argsKey: "startArgs" | "repl
 
   return undefined
 }
+
+export type ModelRef = string | { providerID: string; modelID: string }
+
+export type GateTarget = { kind: "command" | "tool"; delegate: string; tool?: string }
+
+export type GateDecision = { allow: true } | { allow: false; reason: string }
+
+const VERIFIED_MODEL_SEGMENT_RE = /^(\*|[\w.-]+\*?)$/
+
+export function isValidVerifiedModelPattern(entry: unknown, mode: "provider-model" | "bare"): entry is string {
+  if (typeof entry !== "string") return false
+  const parts = entry.split("/")
+  if (mode === "provider-model") {
+    if (parts.length !== 2) return false
+    return parts.every((part) => VERIFIED_MODEL_SEGMENT_RE.test(part))
+  }
+  return parts.length === 1 && VERIFIED_MODEL_SEGMENT_RE.test(entry)
+}
+
+function matchesSegment(actual: string, pattern: string): boolean {
+  if (pattern === "*") return true
+  if (pattern.endsWith("*")) return actual.startsWith(pattern.slice(0, -1))
+  return actual === pattern
+}
+
+export function matchesVerifiedModel(model: ModelRef, patterns: string[]): boolean {
+  return patterns.some((pattern) => {
+    if (pattern.includes("/")) {
+      if (typeof model === "string") return false
+      const [provider, modelPattern] = pattern.split("/")
+      return matchesSegment(model.providerID, provider) && matchesSegment(model.modelID, modelPattern)
+    }
+    const actual = typeof model === "string" ? model : model.modelID
+    return matchesSegment(actual, pattern)
+  })
+}
+
+function modelDisplay(model: ModelRef): string {
+  return typeof model === "string" ? model : `${model.providerID}/${model.modelID}`
+}
+
+function targetLabel(target: GateTarget): { label: string; verb: string } {
+  return target.kind === "command"
+    ? { label: target.delegate, verb: "was not started" }
+    : { label: target.tool ?? target.delegate, verb: "was blocked" }
+}
+
+export function checkDelegationGate(input: {
+  target: GateTarget
+  prompt?: unknown
+  model?: ModelRef
+  verifiedModels?: string[]
+  prefix: "[plugin]" | "[cli-dispatch]"
+}): GateDecision {
+  if (typeof input.prompt === "string" && input.prompt.includes(GENERATED_MARKER)) {
+    const tool = input.target.tool ?? input.target.delegate
+    return {
+      allow: false,
+      reason: `${tool} rejected: the "prompt" argument contains the whole delegate command template instead of the user's actual message. Pass only the user's text as "prompt".`,
+    }
+  }
+
+  const patterns = input.verifiedModels
+  if (!patterns || patterns.length === 0 || !input.model) return { allow: true }
+  if (matchesVerifiedModel(input.model, patterns)) return { allow: true }
+
+  const { label, verb } = targetLabel(input.target)
+  return {
+    allow: false,
+    reason: `${input.prefix} The current model (${modelDisplay(input.model)}) is not on the verified-models allow-list for CLI delegation, so ${label} ${verb}. Switch to a verified model and try again.`,
+  }
+}

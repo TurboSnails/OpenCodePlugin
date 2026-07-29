@@ -1,5 +1,11 @@
 import { describe, it, expect } from "bun:test"
 import { GENERATED_MARKER, EXTERNAL_ID_RE, isValidExternalId, validateArgvInjection } from "../policy"
+import {
+  checkDelegationGate,
+  isValidVerifiedModelPattern,
+  matchesVerifiedModel,
+  type ModelRef,
+} from "../policy"
 
 describe("GENERATED_MARKER", () => {
   it("keeps its exact value", () => {
@@ -60,5 +66,123 @@ describe("validateArgvInjection", () => {
   it("rejects {externalId} embedded in a larger argument", () => {
     const err = validateArgvInjection("bad", "replyArgs", ["--sid={externalId}", "--", "{prompt}"])
     expect(err).toContain('exactly "{externalId}"')
+  })
+})
+
+describe("isValidVerifiedModelPattern", () => {
+  it("accepts provider/model patterns only in provider-model mode", () => {
+    expect(isValidVerifiedModelPattern("anthropic/claude-*", "provider-model")).toBe(true)
+    expect(isValidVerifiedModelPattern("*/*", "provider-model")).toBe(true)
+    expect(isValidVerifiedModelPattern("anthropic", "provider-model")).toBe(false)
+    expect(isValidVerifiedModelPattern("anthropic/claude/extra", "provider-model")).toBe(false)
+    expect(isValidVerifiedModelPattern("/claude", "provider-model")).toBe(false)
+    expect(isValidVerifiedModelPattern(42, "provider-model")).toBe(false)
+  })
+
+  it("accepts bare patterns only in bare mode", () => {
+    expect(isValidVerifiedModelPattern("claude-*", "bare")).toBe(true)
+    expect(isValidVerifiedModelPattern("*", "bare")).toBe(true)
+    expect(isValidVerifiedModelPattern("anthropic/claude-*", "bare")).toBe(false)
+    expect(isValidVerifiedModelPattern("", "bare")).toBe(false)
+    expect(isValidVerifiedModelPattern(null, "bare")).toBe(false)
+  })
+})
+
+describe("matchesVerifiedModel", () => {
+  const objectModel: ModelRef = { providerID: "anthropic", modelID: "claude-sonnet-4-5" }
+
+  it("matches provider/model patterns against object models", () => {
+    expect(matchesVerifiedModel(objectModel, ["anthropic/claude-sonnet-4-5"])).toBe(true)
+    expect(matchesVerifiedModel(objectModel, ["anthropic/*"])).toBe(true)
+    expect(matchesVerifiedModel(objectModel, ["*/claude-*"])).toBe(true)
+    expect(matchesVerifiedModel(objectModel, ["minimax-cn/*"])).toBe(false)
+    expect(matchesVerifiedModel(objectModel, ["Anthropic/*"])).toBe(false)
+  })
+
+  it("matches bare patterns against string models or object modelIDs", () => {
+    expect(matchesVerifiedModel("claude-sonnet-5", ["claude-*"])).toBe(true)
+    expect(matchesVerifiedModel("claude-sonnet-5", ["*"])).toBe(true)
+    expect(matchesVerifiedModel(objectModel, ["claude-*"])).toBe(true)
+    expect(matchesVerifiedModel(objectModel, ["anthropic"])).toBe(false)
+    expect(matchesVerifiedModel("claude-sonnet-5", ["anthropic/claude-*"])).toBe(false)
+    expect(matchesVerifiedModel(objectModel, [])).toBe(false)
+  })
+})
+
+describe("checkDelegationGate", () => {
+  it("allows when no verifiedModels are configured", () => {
+    expect(
+      checkDelegationGate({
+        target: { kind: "tool", delegate: "claude", tool: "claude_start" },
+        prompt: "hi",
+        model: { providerID: "bad", modelID: "model" },
+        prefix: "[plugin]",
+      }),
+    ).toEqual({ allow: true })
+  })
+
+  it("fails open when the model is unknown", () => {
+    expect(
+      checkDelegationGate({
+        target: { kind: "command", delegate: "claude" },
+        verifiedModels: ["anthropic/*"],
+        prefix: "[plugin]",
+      }),
+    ).toEqual({ allow: true })
+  })
+
+  it("denies a known unmatched command model with command wording", () => {
+    const decision = checkDelegationGate({
+      target: { kind: "command", delegate: "claude" },
+      model: { providerID: "minimax-cn", modelID: "MiniMax-M2.5" },
+      verifiedModels: ["anthropic/*"],
+      prefix: "[plugin]",
+    })
+    expect(decision.allow).toBe(false)
+    if (!decision.allow) {
+      expect(decision.reason).toContain("[plugin] The current model (minimax-cn/MiniMax-M2.5)")
+      expect(decision.reason).toContain("claude was not started")
+    }
+  })
+
+  it("denies a known unmatched tool model with tool wording", () => {
+    const decision = checkDelegationGate({
+      target: { kind: "tool", delegate: "claude", tool: "claude_reply" },
+      model: "gpt-5.6-sol",
+      verifiedModels: ["other-*"],
+      prefix: "[cli-dispatch]",
+    })
+    expect(decision.allow).toBe(false)
+    if (!decision.allow) {
+      expect(decision.reason).toContain("[cli-dispatch] The current model (gpt-5.6-sol)")
+      expect(decision.reason).toContain("claude_reply was blocked")
+    }
+  })
+
+  it("rejects a string prompt containing the generated marker before the model gate", () => {
+    const decision = checkDelegationGate({
+      target: { kind: "tool", delegate: "claude", tool: "claude_start" },
+      prompt: `hello\n${GENERATED_MARKER}`,
+      model: "bad-model",
+      verifiedModels: ["other-*"],
+      prefix: "[cli-dispatch]",
+    })
+    expect(decision.allow).toBe(false)
+    if (!decision.allow) {
+      expect(decision.reason).toContain("claude_start rejected")
+      expect(decision.reason).toContain("whole delegate command template")
+    }
+  })
+
+  it("allows a non-string or missing prompt", () => {
+    expect(
+      checkDelegationGate({
+        target: { kind: "tool", delegate: "claude", tool: "claude_start" },
+        prompt: 42,
+        verifiedModels: ["*"],
+        model: "anything",
+        prefix: "[plugin]",
+      }),
+    ).toEqual({ allow: true })
   })
 })
