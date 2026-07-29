@@ -1,7 +1,6 @@
 import { getActiveDelegate, clearActiveDelegate, setSessionAgent, setSessionModel, getSessionModel } from "./session-store";
 import { buildRoutingRule } from "./routing-rule";
-import { matchesVerifiedModel } from "./config";
-import { GENERATED_MARKER } from "./policy";
+import { checkDelegationGate } from "./policy";
 export function makeSystemTransform() {
     return async (input, output) => {
         const active = input.sessionID ? getActiveDelegate(input.sessionID) : undefined;
@@ -60,22 +59,20 @@ export function makeCommandBefore(config) {
             return;
         }
         const patterns = config.verifiedModels;
-        if (!patterns || patterns.length === 0)
-            return;
         const delegate = detectTargetedDelegate(output.parts, Object.keys(config.delegates));
         if (!delegate)
             return;
         const model = getSessionModel(input.sessionID);
-        if (!model)
-            return; // unknown model: fail open (see design.md D2)
-        if (matchesVerifiedModel(model, patterns))
+        const decision = checkDelegationGate({
+            target: { kind: "command", delegate },
+            model,
+            verifiedModels: patterns,
+            prefix: "[plugin]",
+        });
+        if (decision.allow)
             return;
         output.parts.length = 0;
-        output.parts.push({
-            type: "text",
-            text: `[plugin] The current model (${model.providerID}/${model.modelID}) is not on the verified-models allow-list for CLI delegation, so ${delegate} was not started. Switch to a verified model and try again.`,
-            synthetic: true,
-        });
+        output.parts.push({ type: "text", text: decision.reason, synthetic: true });
     };
 }
 // Host-agnostic session.idle detection (design D1-D3, verified against a
@@ -141,21 +138,15 @@ export function makeToolExecuteBefore(config) {
     return async (input, output) => {
         if (!delegateToolNames.has(input.tool))
             return;
-        // Model gate on the direct tool path (design D3): same allow-list as the
-        // slash-command path, so calling {name}_start/{name}_reply directly
-        // cannot bypass it. Unknown model fails open — this is a guardrail
-        // against known-bad models, not a sandbox.
-        const patterns = config.verifiedModels;
-        if (patterns && patterns.length > 0) {
-            const model = getSessionModel(input.sessionID);
-            if (model && !matchesVerifiedModel(model, patterns)) {
-                throw new Error(`[plugin] The current model (${model.providerID}/${model.modelID}) is not on the verified-models allow-list for CLI delegation, so ${input.tool} was blocked. Switch to a verified model and try again.`);
-            }
-        }
-        const prompt = output.args?.prompt;
-        if (typeof prompt === "string" && prompt.includes(GENERATED_MARKER)) {
-            throw new Error(`${input.tool} rejected: the "prompt" argument contains the whole delegate command template instead of the user's actual message. Pass only the user's text as "prompt".`);
-        }
+        const decision = checkDelegationGate({
+            target: { kind: "tool", delegate: input.tool.replace(/_(start|reply)$/, ""), tool: input.tool },
+            prompt: output.args?.prompt,
+            model: getSessionModel(input.sessionID),
+            verifiedModels: config.verifiedModels,
+            prefix: "[plugin]",
+        });
+        if (!decision.allow)
+            throw new Error(decision.reason);
     };
 }
 //# sourceMappingURL=hooks.js.map

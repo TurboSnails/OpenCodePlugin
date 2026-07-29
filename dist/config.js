@@ -2,31 +2,12 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { validateArgvInjection } from "./policy";
-// Each segment is one or more word/dot/hyphen characters, or a lone "*",
-// optionally ending in a trailing "*" wildcard (e.g. "anthropic", "*",
-// "kimi-for-coding-k3*").
-const VERIFIED_MODEL_SEGMENT_RE = /^(\*|[\w.-]+\*?)$/;
+import { isValidVerifiedModelPattern, matchesVerifiedModel as matchesVerifiedModelPolicy } from "./policy";
 export function isValidVerifiedModelEntry(entry) {
-    if (typeof entry !== "string")
-        return false;
-    const parts = entry.split("/");
-    if (parts.length !== 2)
-        return false;
-    const [provider, model] = parts;
-    return VERIFIED_MODEL_SEGMENT_RE.test(provider) && VERIFIED_MODEL_SEGMENT_RE.test(model);
-}
-function matchesSegment(actual, pattern) {
-    if (pattern === "*")
-        return true;
-    if (pattern.endsWith("*"))
-        return actual.startsWith(pattern.slice(0, -1));
-    return actual === pattern;
+    return isValidVerifiedModelPattern(entry, "provider-model");
 }
 export function matchesVerifiedModel(model, patterns) {
-    return patterns.some((pattern) => {
-        const [provider, modelPattern] = pattern.split("/");
-        return matchesSegment(model.providerID, provider) && matchesSegment(model.modelID, modelPattern);
-    });
+    return matchesVerifiedModelPolicy(model, patterns);
 }
 export const DEFAULT_CONFIG = {
     delegates: {
